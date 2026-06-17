@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://unpkg.com/docx@8.6.0/build/index.umd.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #020617; }
@@ -36,11 +36,15 @@
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
 
-const EMAILJS_PUBLIC_KEY  = "80my-FS9g6L7AcdHa";
-const EMAILJS_SERVICE_ID  = "service_b8k1nic";
-const EMAILJS_TEMPLATE_ID = "template_7gsihiw";
-emailjs.init(EMAILJS_PUBLIC_KEY);
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(",")[1] || "";
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
 
 const SAVE_KEY           = "hr_check_session_v3";
 const POLICIES_KEY       = "hr_check_policies_v3";
@@ -656,6 +660,8 @@ function App() {
   const [employeeName, setEmployeeName]     = useState("");
   const [hrEmail, setHrEmail]               = useState("");
   const [hrEmailStatus, setHrEmailStatus]   = useState("idle");
+  const [attachments, setAttachments]       = useState([]);
+  const fileInputRef                        = useRef(null);
   const [followups, setFollowups]           = useState([]);
   const [followupSaved, setFollowupSaved]   = useState(false);
   const [slackWebhook, setSlackWebhook]     = useState("");
@@ -683,18 +689,102 @@ function App() {
   const sc       = allDone ? computeScore(qs,answers) : null;
   const liveLevel = () => { if(!answered)return"neutral"; return computeScore(qs,answers).level; };
 
+  const buildReportLines = (forHR) => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const lines = [forHR?`HR Action Check — Submitted for Review`:`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    if(!forHR){
+      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+      if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
+    }
+    if(attachments.length){ lines.push("","--- Attached files:"); attachments.forEach(f=>lines.push(`- ${f.name}`)); }
+    lines.push("","General guidance only — not legal advice.");
+    return lines;
+  };
+
+  const buildReportDocxBase64 = async () => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const children = [
+      new Paragraph({ text: "HR Action Check Report", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ children: [new TextRun({ text: `Scenario: ${scenario}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `Result: ${ll2}`, bold: true })] }),
+      new Paragraph({ text: `Date: ${new Date().toLocaleDateString()}` }),
+    ];
+    if (employeeName.trim()) children.push(new Paragraph({ text: `Employee: ${employeeName.trim()}` }));
+    children.push(new Paragraph({ text: "" }));
+    children.push(new Paragraph({ text: "Questions & Answers", heading: HeadingLevel.HEADING_2 }));
+    qs.forEach((item,i)=>{
+      const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know";
+      children.push(new Paragraph({ children:[new TextRun({ text:`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`, bold:true })] }));
+      children.push(new Paragraph({ text:`Answer: ${label}` }));
+      if (notes[i]) children.push(new Paragraph({ text:`Note: ${notes[i]}` }));
+      children.push(new Paragraph({ text:"" }));
+    });
+    children.push(new Paragraph({ text: "Recommended Next Steps", heading: HeadingLevel.HEADING_2 }));
+    STEPS[scenario][sc.level].forEach((st,i)=> children.push(new Paragraph({ text:`${i+1}. ${st}` })));
+    const imageAttachments = attachments.filter(f=>f.type && f.type.startsWith("image/"));
+    const otherAttachments = attachments.filter(f=>!(f.type && f.type.startsWith("image/")));
+    if (imageAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Attached Images", heading: HeadingLevel.HEADING_2 }));
+      imageAttachments.forEach(f=>{
+        children.push(new Paragraph({ text: f.name }));
+        try {
+          children.push(new Paragraph({ children: [ new ImageRun({ data: dataUrlToBytes(f.dataUrl), transformation: { width: 400, height: 300 } }) ] }));
+        } catch(e) {}
+        children.push(new Paragraph({ text:"" }));
+      });
+    }
+    if (otherAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Other Attached Files (sent separately with this email)", heading: HeadingLevel.HEADING_2 }));
+      otherAttachments.forEach(f=> children.push(new Paragraph({ text: `- ${f.name}` })));
+    }
+    children.push(new Paragraph({ text:"" }));
+    children.push(new Paragraph({ text: "General guidance only — not legal advice." }));
+    const doc = new Document({ sections: [{ children }] });
+    return Packer.toBase64String(doc);
+  };
+
+  const downloadReport = async () => {
+    if (!sc) return;
+    const base64 = await buildReportDocxBase64();
+    const bytes = dataUrlToBytes(`data:application/octet-stream;base64,${base64}`);
+    const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `HR-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFilesSelected = (fileList) => {
+    Array.from(fileList).forEach(file=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, { name:file.name, type:file.type, size:file.size, dataUrl:reader.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  const removeAttachment = (idx) => setAttachments(prev => prev.filter((_,i)=>i!==idx));
+
   const sendEmail = async () => {
     if (!sc || !emailAddr.includes("@")) return;
     setEmailStatus("sending");
-    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines = [`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
-    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
-    const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
-    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
-    if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
-    lines.push("","General guidance only — not legal advice.");
     try {
-      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { to_email:emailAddr, subject:`${scenario} — ${ll2}`, message:lines.join("\n"), name:"HR Action Check", email:emailAddr });
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:emailAddr, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
       setEmailStatus("sent");
     } catch(e) { setEmailStatus("error"); }
   };
@@ -738,13 +828,18 @@ function App() {
   const sendToHR = async () => {
     if (!sc || !hrEmail.includes("@")) return;
     setHrEmailStatus("sending");
-    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines = [`HR Action Check — Submitted for Review`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
-    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
-    const st2=STEPS[scenario][sc.level]; lines.push("---","Recommended next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
-    lines.push("","General guidance only — not legal advice.");
     try {
-      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { to_email:hrEmail, subject:`${scenario} — ${ll2} — HR Action Check submitted`, message:lines.join("\n"), name:"HR Action Check", email:hrEmail });
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — HR Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
       const submission = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
       const updated = [submission, ...loadHrSubmissions()];
       saveHrSubmissions(updated);
@@ -754,7 +849,7 @@ function App() {
     } catch(e) { setHrEmailStatus("error"); }
   };
 
-  const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); };
+  const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
   const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
   const ans   = (idx,val) => {
     const next=[...answers]; next[idx]=val; setAnswers(next);
@@ -767,7 +862,7 @@ function App() {
       setStep("result");
     }
   };
-  const startNew = () => { clearSession(); setScenario(null); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); };
+  const startNew = () => { clearSession(); setScenario(null); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
 
   const ll = liveLevel();
   const liveColors = {neutral:"#8899aa",good:"#34d399",warn:"#fbbf24",risk:"#fb7185"};
@@ -1134,6 +1229,7 @@ function App() {
                 <button style={s.btn(true)} onClick={start}>Run again</button>
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
+                <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
               </div>
               {/* 30-day follow-up */}
               {(()=>{
@@ -1156,11 +1252,29 @@ function App() {
                 );
               })()}
 
+              {/* Attach supporting files */}
+              <div style={{ marginTop:12, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"18px 18px" }}>
+                <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Attach supporting files (optional)</div>
+                <div style={{ fontSize:"0.8rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Tip: before attaching, consider combining emails, Slack/Teams messages, and other documentation into one Word document — it'll come through more cleanly. Screenshots and photos are embedded directly into the report below; other file types are attached separately and sent alongside it.</div>
+                <input ref={fileInputRef} type="file" multiple style={{ display:"none" }} onChange={e=>{ if(e.target.files&&e.target.files.length) handleFilesSelected(e.target.files); e.target.value=""; }} />
+                <button style={s.btn(false)} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>+ Attach files</button>
+                {attachments.length>0 && (
+                  <div style={{ marginTop:12 }}>
+                    {attachments.map((f,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8, padding:"7px 11px", marginBottom:6 }}>
+                        <div style={{ fontSize:"0.79rem", color:"rgba(248,250,252,0.8)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name} <span style={{ color:"#8899aa" }}>({Math.round(f.size/1024)} KB)</span></div>
+                        <button onClick={()=>removeAttachment(i)} style={{ background:"none", border:"none", cursor:"pointer", color:"#fb7185", fontSize:"0.9rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit", flexShrink:0 }} title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Combined send card */}
               <div style={{ marginTop:12, background:"linear-gradient(135deg,rgba(34,193,255,0.07),rgba(110,231,183,0.05))", border:"1px solid rgba(34,193,255,0.3)", borderRadius:14, padding:"20px 18px" }}>
                 {/* Email to self */}
                 <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Email this to yourself</div>
-                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Your full results go to your inbox. Add notes and bring it to HR.</div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to your inbox. Add notes and bring it to HR.</div>
                 {emailStatus==="sent" ? (
                   <div style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:9, padding:"10px 14px", fontSize:"0.84rem", color:"#34d399", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
                 ) : (
@@ -1180,7 +1294,7 @@ function App() {
 
                 {/* Send to HR */}
                 <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send to HR</div>
-                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Send directly to your HR team. Logged in the HR Dashboard.</div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard.</div>
                 {!hrEmail ? (
                   <div style={{ fontSize:"0.81rem", color:"#8899aa", lineHeight:1.5 }}>HR email not configured yet — an admin can set it in Company Policies → Upload Files.</div>
                 ) : hrEmailStatus==="sent" ? (
