@@ -35,6 +35,10 @@ Independent of the blank-page bug, the webhook-notify feature (`/api/notify`, us
 - `api/notify.js` and `vercel.json` were left untouched so Vercel still works if used again.
 - Commit `1be0d16`.
 
+## Brevo configuration status
+
+`BREVO_API_KEY` and `BREVO_SENDER_EMAIL` (sender: `melissaw212@gmail.com`) are set as Netlify environment variables (Site configuration → Environment variables). Set 2026-06-16.
+
 ## How notifications work (for reference)
 
 - **Slack / Teams ping:** user pastes an incoming webhook URL into Policy Library settings (stored in `localStorage`). On submit, the app POSTs a Slack Block Kit or Teams MessageCard payload to `/api/notify`, which relays it server-side to the saved webhook URL (browsers can't POST directly to Slack/Teams webhooks due to CORS, hence the relay function). Unaffected by the email changes below.
