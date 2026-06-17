@@ -19,6 +19,10 @@ exports.handler = async function (event) {
     const hrEmail = (await store.get("hrEmail")) || "";
     return { statusCode: 200, headers, body: JSON.stringify({ hrEmail }) };
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+    const debug = {
+      hasSiteId: Boolean(process.env.SITE_ID || process.env.NETLIFY_SITE_ID),
+      hasToken: Boolean(process.env.NETLIFY_BLOBS_TOKEN),
+    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message, debug }) };
   }
 };
