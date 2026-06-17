@@ -63,6 +63,26 @@ Independent of the blank-page bug, the webhook-notify feature (`/api/notify`, us
   - Until both are set, `/api/send-report-email` returns a clear 500 ("Email is not configured...") instead of silently failing — `sendEmail`/`sendToHR` catch this and show the existing "Something went wrong" error state in the UI.
 - Brevo free tier: 300 emails/day, no domain purchase required, just sender-email verification.
 
+## 2026-06-17: HR email moved from per-browser localStorage to a global setting
+
+**Symptom:** An employee saw "HR email not configured yet" on the result screen's "Send to HR" panel, even though an admin had already set it in Company Policies → Upload Files.
+
+**Root cause:** The HR email was only ever stored in the browser's `localStorage` (key `hr_check_hr_email_v1`) — there was no server-side/shared storage. Setting it on one browser/device never propagated to any other browser, device, or after clearing site data.
+
+**Fix:**
+
+- Added `netlify/functions/get-hr-email.js` and `netlify/functions/save-hr-email.js`, backed by **Netlify Blobs** (no external account needed, built into the Netlify site).
+- Added `package.json` declaring `@netlify/blobs` as a dependency so Netlify installs it during the function build.
+- `index.html` / `hr-action-check-final-5.26.html`: on load, the app now fetches the HR email from `/api/get-hr-email` (falling back to the cached localStorage value instantly while that request is in flight). The Company Policies "Save" button now POSTs to `/api/save-hr-email`, so the value is shared across every browser/device, not just the one that set it.
+
+**Netlify Blobs gotcha:** Netlify's automatic Blobs context injection (zero-config `getStore("name")`) returned `MissingBlobsEnvironmentError` / "The environment has not been configured to use Netlify Blobs" in production on this site, despite working per Netlify's docs. Worked around it with explicit manual configuration in `netlify/functions/lib/blob-store.js`:
+
+- `siteID` comes from `process.env.SITE_ID`, which Netlify auto-injects into every function — no setup needed.
+- `token` comes from `process.env.NETLIFY_BLOBS_TOKEN`, a **Personal Access Token** that must be created manually (Netlify → User settings → Applications → Personal access tokens → New access token) and added as a site environment variable. **Scopes must include "Functions"** (or just select "All scopes") — the first attempt failed silently because the variable was saved without the right scope, so the function never saw it. Confirmed via a temporary debug field on the 500 response (since removed) showing `hasSiteId:true, hasToken:false`.
+- This token is a third secret to keep alongside `BREVO_API_KEY` / `BREVO_SENDER_EMAIL` — if it's ever revoked or rotated, `/api/get-hr-email` and `/api/save-hr-email` will start 500ing again with the same Blobs error.
+
+**Verified:** `curl https://hractioncheck.netlify.app/api/get-hr-email` → `{"hrEmail":"melissaw212@gmail.com"}`. Save/load round-trip tested via curl before confirming through the actual UI.
+
 ## Verifying after future changes
 
 1. `curl -sI https://hractioncheck.netlify.app/` — check the `etag` changed after a push, confirming a new deploy went out.
