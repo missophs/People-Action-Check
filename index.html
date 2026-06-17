@@ -73,6 +73,20 @@ function loadPinHash()       { try { return localStorage.getItem(PIN_KEY) || DEF
 function savePinHash(h)      { try { localStorage.setItem(PIN_KEY, h); } catch(e) {} }
 function loadHrEmail()       { try { return localStorage.getItem(HR_EMAIL_KEY)||""; } catch(e){return "";} }
 function saveHrEmail(v)      { try { localStorage.setItem(HR_EMAIL_KEY, v); } catch(e) {} }
+async function fetchHrEmailFromServer() {
+  const res = await fetch("/api/get-hr-email");
+  if (!res.ok) throw new Error("fetch failed");
+  const data = await res.json();
+  return data.hrEmail || "";
+}
+async function saveHrEmailToServer(v) {
+  const res = await fetch("/api/save-hr-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hrEmail: v }),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
 function loadHrSubmissions() { try { const d=localStorage.getItem(HR_SUBMISSIONS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
 function saveHrSubmissions(d){ try { localStorage.setItem(HR_SUBMISSIONS_KEY, JSON.stringify(d.slice(0,50))); } catch(e) {} }
 function loadFollowups()      { try { const d=localStorage.getItem(HR_FOLLOWUPS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
@@ -232,6 +246,9 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [showReset, setShowReset]         = useState(false);
   const [hrEmailInput, setHrEmailInput]   = useState(hrEmail||"");
   const [hrEmailSaved, setHrEmailSaved]   = useState(false);
+  const [hrEmailSaving, setHrEmailSaving] = useState(false);
+  const [hrEmailError, setHrEmailError]   = useState(false);
+  useEffect(() => { setHrEmailInput(hrEmail||""); }, [hrEmail]);
   const [slackInput, setSlackInput]       = useState(slackWebhook||"");
   const [slackSaved, setSlackSaved]       = useState(false);
   const [teamsInput, setTeamsInput]       = useState(teamsWebhook||"");
@@ -443,10 +460,16 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>HR Email Address</div>
                   <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:8 }}>Employees can send check results directly to this address using the "Send to HR" button on result screens.</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); }} />
-                    <button style={s.btn(true)} onClick={()=>{ onSaveHrEmail(hrEmailInput.trim()); setHrEmailSaved(true); }}>Save</button>
+                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); setHrEmailError(false); }} />
+                    <button style={{ ...s.btn(true), opacity:hrEmailSaving?0.6:1 }} disabled={hrEmailSaving} onClick={async()=>{
+                      setHrEmailSaving(true); setHrEmailError(false);
+                      try { await onSaveHrEmail(hrEmailInput.trim()); setHrEmailSaved(true); }
+                      catch(e) { setHrEmailError(true); }
+                      setHrEmailSaving(false);
+                    }}>{hrEmailSaving?"Saving...":"Save"}</button>
                   </div>
-                  {hrEmailSaved && <div style={{ fontSize:"0.77rem", color:"#34d399", marginTop:6 }}>Saved.</div>}
+                  {hrEmailSaved && <div style={{ fontSize:"0.77rem", color:"#34d399", marginTop:6 }}>Saved — applies to every device.</div>}
+                  {hrEmailError && <div style={{ fontSize:"0.77rem", color:"#fb7185", marginTop:6 }}>Couldn't save. Check your connection and try again.</div>}
                 </div>
                 {/* Notifications */}
                 <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:14, marginTop:6 }}>
@@ -667,7 +690,10 @@ function App() {
   const [slackWebhook, setSlackWebhook]     = useState("");
   const [teamsWebhook, setTeamsWebhook]     = useState("");
 
-  useEffect(() => { setPolicies(loadPolicies()); setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook()); }, []);
+  useEffect(() => {
+    setPolicies(loadPolicies()); setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
+  }, []);
   useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
 
@@ -894,7 +920,7 @@ function App() {
 
   return (
     <div style={s.wrap}>
-      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={v=>{saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
 
       <div style={{ maxWidth:840, margin:"0 auto" }}>
 
