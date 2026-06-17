@@ -1,30 +1,37 @@
-# HR Sanity Check — Project Instructions
+# HR Action Check — Project Instructions
 
 ## What This Is
 
-A standalone browser tool that helps managers run a structured risk check before taking HR action. No backend, no data storage. Everything runs in the browser.
+A standalone browser tool that helps managers run a structured risk check before taking HR action. No database, no stored user data on any server — check history and settings live in the browser's `localStorage`. Two small Netlify Functions exist only as secure relays (Slack/Teams webhook posting, Brevo email sending) since browsers can't do those directly.
 
 ## Live Deployment
 
-- URL: https://hr-action-check.vercel.app
-- Vercel project: `melissaw212-1631s-projects/hr-action-check`
-- To redeploy: `vercel deploy --prod` from this folder
+- URL: https://hractioncheck.netlify.app (primary — auto-deploys from GitHub)
+- Deploys from: `github.com/missophs/hr-action-check`, branch `webhooks` (GitHub default branch)
+- Auto-publish is on — just `git push origin webhooks` to deploy
+- Secondary/backup: https://hr-action-check.vercel.app (Vercel project `melissaw212-1631s-projects/hr-action-check`, not actively used — kept connected for parity, see `DEPLOYMENT-NOTES.md`)
+- See `DEPLOYMENT-NOTES.md` for required Netlify environment variables (`BREVO_API_KEY`, `BREVO_SENDER_EMAIL`) and incident/troubleshooting history
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Production file — what Vercel serves |
-| `hr-action-check-final-5.26.html` | Most recent working version (source of truth) |
+| `index.html` | Production file — what Netlify serves |
+| `hr-action-check-final-5.26.html` | Source-of-truth working copy, kept identical to `index.html` |
 | `hr-sanity-check-artifact-final.jsx` | React source (reference only) |
 | `HR-Sanity-Check-Project-2.md` | Full feature/version reference |
-| `vercel.json` | Rewrites all routes to index.html |
+| `netlify.toml` | Publish dir, SPA redirect, `/api/*` routing to Netlify Functions |
+| `netlify/functions/notify.js` | Slack/Teams webhook relay |
+| `netlify/functions/send-report-email.js` | Brevo-backed email sending (supports real attachments) |
+| `vercel.json`, `api/notify.js` | Legacy Vercel support, not actively used |
+| `DEPLOYMENT-NOTES.md` | Deployment config, env vars, incident history |
 
 ## Workflow
 
 1. Make changes to `hr-action-check-final-5.26.html`
-2. Copy updated file to `index.html`
-3. Run `vercel deploy --prod` to push live
+2. Copy updated file to `index.html` (`cp hr-action-check-final-5.26.html index.html`)
+3. Commit and `git push origin webhooks` — Netlify auto-deploys
+4. Verify: check the `etag` changed on the live URL, and load the page in a real browser (a 200 response doesn't guarantee it actually renders — see `DEPLOYMENT-NOTES.md`)
 
 ## Scenarios Covered
 

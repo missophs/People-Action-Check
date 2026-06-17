@@ -1,5 +1,9 @@
 # Deployment Notes — Netlify
 
+## Status: verified working (2026-06-16)
+
+Full flow tested end-to-end through the actual app UI (not just API calls): picked a scenario, answered all questions, reached the result screen, attached a file, generated the Word doc report, and sent via both "Email yourself" and "Send to HR" — emails arrived in the inbox with real attachments. Slack/Teams webhook relay tested separately and confirmed working. Nothing currently outstanding.
+
 ## Current setup
 
 - Live site: https://hractioncheck.netlify.app
