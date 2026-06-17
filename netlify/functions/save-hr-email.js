@@ -1,4 +1,4 @@
-const { getStore } = require("@netlify/blobs");
+const { hrConfigStore } = require("./lib/blob-store");
 
 exports.handler = async function (event) {
   const headers = {
@@ -25,7 +25,7 @@ exports.handler = async function (event) {
   }
 
   try {
-    const store = getStore("hr-action-check-config");
+    const store = hrConfigStore();
     await store.set("hrEmail", hrEmail.trim());
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   } catch (e) {
