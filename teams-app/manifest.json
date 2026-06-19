@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "5f1b6c2a-8e4d-4a3b-9f6e-2c7d8a1b3e90",
+  "developer": {
+    "name": "Melissa A. Weiss",
+    "websiteUrl": "https://hractioncheck.netlify.app",
+    "privacyUrl": "https://hractioncheck.netlify.app",
+    "termsOfUseUrl": "https://hractioncheck.netlify.app"
+  },
+  "name": {
+    "short": "HR Action Check",
+    "full": "HR Action Check"
+  },
+  "description": {
+    "short": "Run a structured risk check before taking HR action.",
+    "full": "A standalone tool that helps managers run a structured risk check before taking HR action, covering performance, attendance, conduct, and termination scenarios."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#1A3C6E",
+  "staticTabs": [
+    {
+      "entityId": "hrActionCheckTab",
+      "name": "HR Action Check",
+      "contentUrl": "https://hractioncheck.netlify.app",
+      "websiteUrl": "https://hractioncheck.netlify.app",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["hractioncheck.netlify.app"]
+}

@@ -9,7 +9,7 @@
 ## What it does
 
 - Employee types `/hrcheck` anywhere in Slack
-- Slack sends them a private (ephemeral) message: "Run your HR Action Check here: https://hr-action-check.vercel.app"
+- Slack sends them a private (ephemeral) message: "Run your HR Action Check here: https://hractioncheck.netlify.app"
 - Only visible to the person who typed the command — no channel clutter
 - Works on desktop and mobile Slack
 
@@ -28,22 +28,28 @@ If the Slack incoming webhook app already exists, skip to Step 2. Otherwise:
 2. Click **Create New Command**
 3. Fill in:
    - Command: `/hrcheck`
-   - Request URL: `https://hr-action-check.vercel.app/api/slack-command`
+   - Request URL: `https://hractioncheck.netlify.app/api/slack-command`
    - Short description: `Run an HR Action Check`
    - Usage hint: (leave blank)
 4. Click **Save**
 
-### Step 3 — Create the serverless function
-Create `/api/slack-command.js` in the HR Sanity check folder:
+### Step 3 — Create the Netlify function
+Create `netlify/functions/slack-command.js` in the HR Sanity check folder (matches the existing `notify.js` relay pattern — no new routing needed since `netlify.toml` already forwards `/api/*` to `/.netlify/functions/:splat`):
 
 ```js
-module.exports = async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
-  // Slack sends form-encoded body for slash commands
-  res.status(200).json({
-    response_type: "ephemeral",
-    text: "Run your HR Action Check here: https://hr-action-check.vercel.app",
-  });
+exports.handler = async function (event) {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "" };
+  }
+  // Slack sends form-encoded body for slash commands, not JSON
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      response_type: "ephemeral",
+      text: "Run your HR Action Check here: https://hractioncheck.netlify.app",
+    }),
+  };
 };
 ```
 
@@ -54,8 +60,11 @@ module.exports = async function handler(req, res) {
 ### Step 5 — Deploy
 ```
 cp hr-action-check-final-5.26.html index.html
-npx vercel --prod
+git add netlify/functions/slack-command.js index.html
+git commit -m "Add Slack slash command for HR Action Check"
+git push origin webhooks
 ```
+Netlify auto-deploys on push — no separate deploy command needed.
 
 ### Step 6 — Test
 Type `/hrcheck` in any Slack channel. You should get a private message with the link.
@@ -76,22 +85,26 @@ Type `/hrcheck` in any Slack channel. You should get a private message with the 
 Instead of just a link, the ephemeral message could include a formatted card with a button:
 
 ```js
-res.status(200).json({
-  response_type: "ephemeral",
-  blocks: [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "*HR Action Check*\nRun a private confidence check before taking HR action."
-      },
-      accessory: {
-        type: "button",
-        text: { type: "plain_text", text: "Open HR Action Check" },
-        url: "https://hr-action-check.vercel.app",
-        action_id: "open_app"
+return {
+  statusCode: 200,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    response_type: "ephemeral",
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*HR Action Check*\nRun a private confidence check before taking HR action."
+        },
+        accessory: {
+          type: "button",
+          text: { type: "plain_text", text: "Open HR Action Check" },
+          url: "https://hractioncheck.netlify.app",
+          action_id: "open_app"
+        }
       }
-    }
-  ]
-});
+    ]
+  }),
+};
 ```
