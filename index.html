@@ -1,21 +1,1377 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Author" content="Melissa A. Weiss">
-  <meta name="Copyright" content="© 2025 Melissa A. Weiss. All rights reserved.">
-  <meta name="Description" content="People Action Check — a private confidence check for people-management decisions. Developed by Melissa A. Weiss.">
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2685.6">
-  <style type="text/css">
-    body {background-color: #030712}
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Times; -webkit-text-stroke: #000000; min-height: 14.0px}
-    span.s1 {font-kerning: none}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>People Action Check</title>
+  <meta name="author" content="Melissa A. Weiss">
+  <meta name="copyright" content="© 2025 Melissa A. Weiss. All rights reserved.">
+  <meta name="description" content="People Action Check — a private confidence check for people-management decisions. Developed by Melissa A. Weiss.">
+  <!-- People Action Check — developed by Melissa A. Weiss, 2025. All rights reserved. Unauthorized reproduction or distribution is prohibited. -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://unpkg.com/docx@8.6.0/build/index.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #020617; }
+    textarea:focus { border-color: rgba(34,193,255,0.35) !important; }
+    input:focus { outline: none; border-color: rgba(34,193,255,0.35) !important; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeIn 0.2s ease forwards; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+    .shake { animation: shake 0.35s ease; }
+    @media (max-width: 600px) {
+      .hdr-desc { font-size: 0.76rem !important; }
+      .hdr-row { flex-wrap: wrap; }
+      .hdr-pol { width: 100%; justify-content: center; margin-top: 6px; }
+      .ans-btn { min-height: 44px !important; padding: 10px 14px !important; font-size: 0.85rem !important; }
+      .notes-ta { font-size: 16px !important; }
+      .email-input { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>
-<p class="p1"><span class="s1"></span><br></p>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
+
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(",")[1] || "";
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+const SAVE_KEY           = "hr_check_session_v3";
+const POLICIES_KEY       = "hr_check_policies_v3";
+const PIN_KEY            = "hr_check_pin_v3";
+const HISTORY_KEY        = "hr_check_history_v1";
+const HR_EMAIL_KEY       = "hr_check_hr_email_v1";
+const HR_SUBMISSIONS_KEY = "hr_check_hr_inbox_v1";
+const HR_FOLLOWUPS_KEY   = "hr_check_followups_v1";
+const SLACK_WEBHOOK_KEY  = "hr_check_webhook_slack_v1";
+const TEAMS_WEBHOOK_KEY  = "hr_check_webhook_teams_v1";
+// Default PIN is 1234 — SHA-256 hash pre-computed
+const DEFAULT_PIN_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+function saveSession(d)    { try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch(e) {} }
+function loadSession()     { try { const d=localStorage.getItem(SAVE_KEY); return d?JSON.parse(d):null; } catch(e){return null;} }
+function clearSession()    { try { localStorage.removeItem(SAVE_KEY); } catch(e) {} }
+function savePolicies(d)   { try { localStorage.setItem(POLICIES_KEY, JSON.stringify(d)); } catch(e) {} }
+function loadPolicies()    { try { const d=localStorage.getItem(POLICIES_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
+function loadCheckHistory(){ try { const d=localStorage.getItem(HISTORY_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
+function saveCheckHistory(d){ try { localStorage.setItem(HISTORY_KEY, JSON.stringify(d)); } catch(e) {} }
+function loadPinHash()       { try { return localStorage.getItem(PIN_KEY) || DEFAULT_PIN_HASH; } catch(e){return DEFAULT_PIN_HASH;} }
+function savePinHash(h)      { try { localStorage.setItem(PIN_KEY, h); } catch(e) {} }
+function loadHrEmail()       { try { return localStorage.getItem(HR_EMAIL_KEY)||""; } catch(e){return "";} }
+function saveHrEmail(v)      { try { localStorage.setItem(HR_EMAIL_KEY, v); } catch(e) {} }
+async function fetchHrEmailFromServer() {
+  const res = await fetch("/api/get-hr-email");
+  if (!res.ok) throw new Error("fetch failed");
+  const data = await res.json();
+  return data.hrEmail || "";
+}
+async function saveHrEmailToServer(v) {
+  const res = await fetch("/api/save-hr-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hrEmail: v }),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
+function loadHrSubmissions() { try { const d=localStorage.getItem(HR_SUBMISSIONS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
+function saveHrSubmissions(d){ try { localStorage.setItem(HR_SUBMISSIONS_KEY, JSON.stringify(d.slice(0,50))); } catch(e) {} }
+function loadFollowups()      { try { const d=localStorage.getItem(HR_FOLLOWUPS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
+function saveFollowups(d)     { try { localStorage.setItem(HR_FOLLOWUPS_KEY, JSON.stringify(d)); } catch(e) {} }
+function loadSlackWebhook()   { try { return localStorage.getItem(SLACK_WEBHOOK_KEY)||""; } catch(e){return "";} }
+function saveSlackWebhook(v)  { try { localStorage.setItem(SLACK_WEBHOOK_KEY, v); } catch(e) {} }
+function loadTeamsWebhook()   { try { return localStorage.getItem(TEAMS_WEBHOOK_KEY)||""; } catch(e){return "";} }
+function saveTeamsWebhook(v)  { try { localStorage.setItem(TEAMS_WEBHOOK_KEY, v); } catch(e) {} }
+
+const POLICY_CATEGORIES = [
+  { id:"attendance",    label:"Attendance & Leave",       color:"#fbbf24", scenarios:["Attendance Issue","Leave of Absence"] },
+  { id:"performance",   label:"Performance Management",   color:"#34d399", scenarios:["Performance Decline","Termination Consideration"] },
+  { id:"conduct",       label:"Code of Conduct",          color:"#fb7185", scenarios:["Policy Violation","Harassment / Discrimination","Interpersonal Conflict"] },
+  { id:"accommodation", label:"Accommodation & ADA",      color:"#a78bfa", scenarios:["Accommodation Request","Leave of Absence"] },
+  { id:"separation",    label:"Termination & RIF",        color:"#f97316", scenarios:["Termination Consideration","Reduction in Force","Retaliation Concern"] },
+  { id:"handbook",      label:"Employee Handbook",        color:"#22c1ff", scenarios:["Performance Decline","Attendance Issue","Policy Violation","Interpersonal Conflict","Termination Consideration","Accommodation Request","Harassment / Discrimination","Retaliation Concern","Reduction in Force","Leave of Absence"] },
+  { id:"other",         label:"Other / General",          color:"#8899aa", scenarios:[] },
+];
+
+const META = {
+  "Performance Decline":      { icon:"📉", riskLevel:"medium", riskLabel:"Moderate Risk", description:"A team member is not meeting expected standards of work output, quality, or behavior. Very manageable when handled with clear documentation and consistent communication.", examples:["An employee who consistently missed quarterly targets despite coaching conversations over three months.","A team member whose work quality dropped since returning from a leave of absence.","Someone who used to be a strong performer but has been disengaged and error-prone for six weeks.","An employee who repeatedly submits reports late after multiple reminders.","A customer-facing employee receiving escalating complaints about attitude or responsiveness.","A team member who stops contributing in meetings and misses collaborative deadlines.","An employee whose output volume dropped significantly without a clear explanation.","Someone who was coached verbally twice and is now making the same errors again."], docTips:["Send a follow-up email after every coaching conversation summarizing what was discussed and what is expected.","Use a simple log: date, what you observed, what you said, how the employee responded.","Save any examples of substandard work — reports, emails, error logs — as attachments.","Document goals in writing before any review period begins so expectations are clear.","Note any explanation the employee gave and whether it was substantiated."], watch:"Performance issues that began after an accommodation request, leave, or protected disclosure create legal exposure and must be handled carefully.", contactHR:"If you are unsure whether the performance issue is connected to a medical condition, leave, or a recent complaint — stop and contact HR before doing anything else." },
+  "Attendance Issue":         { icon:"⏰", riskLevel:"medium", riskLabel:"Moderate Risk", description:"An employee is frequently absent, late, or leaving early in a pattern affecting their work and team. Straightforward when policy is clear — complex when protected leave is involved.", examples:["An employee who has called out 8 times in 10 weeks with no medical documentation.","Someone consistently 30–45 minutes late despite two prior verbal conversations.","Absences that cluster around Mondays and Fridays in a recurring pattern.","An employee who leaves early several times a week without prior approval.","A team member whose unplanned absences are causing coverage gaps for the rest of the team.","Someone who has exhausted their PTO balance and continues calling out.","An employee who calls out frequently but refuses to provide any explanation.","A remote employee who is repeatedly unavailable during core hours without notice."], docTips:["Keep a running attendance log with exact dates, times, and any reason given by the employee.","Note when you notified the employee and what their response was — in writing, even a quick email.","Save any documentation the employee provided (doctor's notes, text messages, emails).","Record whether each absence was excused or unexcused per your policy.","If a pattern is emerging (e.g. always Mondays), note the pattern explicitly in your log."], watch:"Absences that may qualify as FMLA, ADA accommodations, or state-protected leave. Disciplining an employee for protected absences is one of the most common HR legal mistakes.", contactHR:"If the employee has mentioned a health condition, family care responsibility, or anything that sounds like it could be protected — contact HR before issuing any discipline." },
+  "Interpersonal Conflict":   { icon:"🤝", riskLevel:"medium", riskLabel:"Moderate Risk", description:"Two or more employees are in conflict through disagreements or friction affecting the team dynamic. Most conflicts are manageable. Some escalate into harassment or hostile workplace territory.", examples:["Two team members who had a heated argument in a meeting and are no longer speaking.","An employee complaining that a peer is undermining them in front of clients.","A group dynamic where one person is being excluded from team communication.","A manager receiving complaints from multiple employees about one person's behavior.","Two employees who work closely together but have reached a point of open hostility.","A team member who is passive-aggressively sabotaging a colleague's projects.","A newer employee complaining that a tenured peer is dismissive and demeaning.","Conflict that started as a work disagreement and has become personal."], docTips:["Write a brief summary of what each party told you — separately — including dates and specific quotes where possible.","Document any witnesses who observed the behavior.","Note any prior incidents, even informal complaints you heard but did not formally log.","Record the outcome of any mediation or coaching conversation in writing and share it with both parties.","Keep a timeline: when the conflict started, key incidents, what actions you took, and outcomes."], watch:"Patterns of behavior targeting someone based on a protected characteristic. What looks like a personality conflict may legally be harassment.", contactHR:"If any part of the conflict involves comments about race, gender, age, disability, religion, or any protected characteristic — treat it as a potential harassment matter and contact HR immediately." },
+  "Policy Violation":         { icon:"⚠️", riskLevel:"medium", riskLabel:"Moderate Risk", description:"An employee has violated a written or established workplace policy. The response depends on severity, whether it was a first offense, and whether the policy has been applied consistently.", examples:["An employee who used company equipment for personal business in violation of the IT policy.","Someone who shared confidential client information externally without authorization.","A team member who bypassed a safety protocol resulting in a near-miss incident.","An employee who falsified time records.","Someone who violated the social media policy by posting about a client.","A manager who failed to follow the required approval process for a significant purchase.","An employee caught accessing systems or files outside their authorized scope.","Someone who violated the workplace conduct policy through inappropriate language or behavior."], docTips:["Save a copy of the policy that was violated, including the version and date the employee signed or acknowledged it.","Write a factual description of the violation: what happened, when, who observed it, what evidence exists.","Document how you became aware of the issue and any investigation steps you took.","Note whether this is a first offense or whether there is a prior discipline history.","Record any mitigating explanation the employee offered."], watch:"Selective enforcement. If you discipline one employee for a violation but have tolerated the same behavior from others, you create disparate treatment risk.", contactHR:"If you are not certain the policy applies clearly to this situation, or if similar behavior has been overlooked in the past — contact HR before taking action." },
+  "Termination Consideration": { icon:"🚪", riskLevel:"high", riskLabel:"High Risk", description:"You are considering ending an employee's employment. This is the highest-stakes management decision you will make and carries significant legal exposure if not handled correctly.", examples:["An employee who failed to meet goals outlined in a formal Performance Improvement Plan.","Someone who violated a zero-tolerance policy (harassment, theft, falsifying records).","A long-tenured employee whose role is being eliminated as part of a restructuring.","An employee who has received multiple written warnings and continues the same behavior.","Someone whose conduct in a single incident was severe enough to warrant immediate termination.","An employee who abandoned their position without notice or explanation.","A manager whose team filed multiple substantiated complaints about their leadership.","Someone who failed a drug or background screening that is a condition of employment."], docTips:["Compile the full disciplinary history in chronological order: verbal warnings, written warnings, PIP, and outcomes.","Confirm in writing that the employee received, signed, and had a chance to respond to each step.","Document the specific reason for termination in one clear sentence — this will appear in official records.","Note the date HR and/or legal reviewed and cleared the termination.","Prepare a separation checklist: final pay, equipment return, benefit end dates, COBRA notice, access revocation."], watch:"Any termination where the employee recently filed a complaint, requested accommodation, took protected leave, or belongs to a protected class.", contactHR:"Contact HR before scheduling the meeting, before saying anything to the employee, and before preparing any paperwork. No termination should move forward without HR sign-off." },
+  "Accommodation Request":    { icon:"♿", riskLevel:"high", riskLabel:"High Risk", description:"An employee has requested a change to their work conditions due to a disability, medical condition, or religious belief. The law requires an interactive process — ignoring or dismissing the request is not an option.", examples:["An employee with a back condition requesting a standing desk or modified workstation.","A team member with anxiety disorder requesting reduced travel or remote work.","An employee requesting schedule modifications for religious observance.","Someone requesting additional break time due to a chronic health condition.","An employee returning from medical leave who cannot perform all previous job functions.","A team member with a hearing impairment requesting captioning for all video meetings.","An employee with ADHD requesting written instructions and deadline reminders.","Someone requesting a private space for medical treatment during the workday."], docTips:["Document the date and method of the request — even if it was verbal, note it in writing the same day.","Record every step of the interactive process: who was involved, what was discussed, what options were explored.","Keep copies of any medical documentation provided, stored securely and separately from the employee's general file.","Document the accommodation decision and the specific rationale in writing.","If accommodation is denied, document why — and have legal review that rationale before communicating it."], watch:"Treating an accommodation request informally or verbally without documentation. Delay and inaction are both forms of denial under the law.", contactHR:"Contact HR the same day any accommodation request is made — even if the employee frames it casually. The legal clock starts when the need is expressed, not when a formal form is submitted." },
+  "Harassment / Discrimination": { icon:"🛑", riskLevel:"high", riskLabel:"High Risk", description:"An employee has reported being harassed or discriminated against based on a protected characteristic. This triggers immediate obligations and the complainant must be protected from retaliation immediately.", examples:["An employee reports their manager made repeated comments about their age and ability to 'keep up.'","A team member alleges they were passed over for promotion due to their race.","An employee reports unwanted physical contact or sexually suggestive comments from a colleague.","Someone reports being excluded from meetings or opportunities after disclosing a pregnancy.","An employee complains about a pattern of demeaning jokes targeting their national origin.","A team member reports that their manager created a hostile environment after they disclosed a disability.","An employee says they were threatened or intimidated for reporting a prior concern.","Someone reports being assigned lesser work or fewer opportunities than peers of a different gender."], docTips:["Write down the complaint exactly as reported — use the employee's own words wherever possible.","Note the date, time, location, and method of the complaint (in person, email, etc.).","Document the names of any witnesses mentioned and any evidence the employee referenced.","Record every investigation step: who was interviewed, when, what they said, and what documentation was reviewed.","Preserve all relevant emails, messages, and records. Do not allow anything to be deleted."], watch:"Any action that could be interpreted as punishing the person who raised the complaint. Retaliation claims are often more costly than the underlying complaint.", contactHR:"Contact HR immediately — before responding to the employee, before speaking to the accused, and before taking any action. This is not optional." },
+  "Retaliation Concern":      { icon:"🔁", riskLevel:"high", riskLabel:"High Risk", description:"You are considering an adverse action against an employee who recently engaged in protected activity — filing a complaint, requesting accommodation, taking leave, or participating in an investigation.", examples:["A manager wants to put an employee on a PIP two weeks after that employee filed an HR complaint.","An employee who testified in an investigation is suddenly moved to a less desirable shift.","A high performer who requested FMLA leave receives their first negative review one month later.","An employee who reported a safety violation is excluded from a project they previously led.","A team member who requested an accommodation is passed over for a promotion with no documented rationale.","An employee who filed an EEOC charge is suddenly subject to new performance monitoring.","A manager attempts to reassign an employee's responsibilities after they raised a pay equity concern.","An employee who participated in a harassment investigation notices a sudden change in their manager's behavior toward them."], docTips:["Document the timeline explicitly: when did the protected activity occur, and when did the adverse action arise.","Write down the business rationale for the adverse action and confirm it predates the protected activity.","Gather evidence that the performance or conduct issue was documented before the complaint was filed.","Note who else made the decision and ensure there is more than one person's input documented.","Record that HR and/or legal reviewed and approved the action before it was taken."], watch:"The 'temporal proximity' problem. Courts treat close timing between protected activity and adverse action as evidence of retaliation.", contactHR:"Do not take any adverse action — including a conversation, a schedule change, or a performance warning — without HR and legal review first. The risk here is significant." },
+  "Reduction in Force":       { icon:"📋", riskLevel:"high", riskLabel:"High Risk", description:"You are eliminating positions due to business need. An RIF requires documented selection criteria, adverse impact analysis, and compliance with notice obligations.", examples:["A company eliminating a product line and laying off the associated team.","A department restructuring that consolidates three roles into two.","A budget-driven reduction affecting 10% of headcount across multiple teams.","A merger that creates redundant functions across two organizations.","A company closing a regional office and eliminating all positions at that location.","An organization shifting from in-house to outsourced functions, eliminating internal roles.","A startup that raised less funding than expected and must reduce burn rate immediately.","A restructuring where layers of management are removed to flatten the organization."], docTips:["Define and document selection criteria before any names are identified — criteria must be neutral and job-related.","Run an adverse impact analysis on the selected population before the RIF is finalized.","Prepare a written business rationale for the RIF that does not reference any individual's performance.","Document the separation terms, severance calculations, and legal review of all agreements.","Keep records of WARN Act analysis, notice timelines, and any required state-specific filings."], watch:"A selection pool where employees selected for separation are disproportionately from a protected group. This requires legal review before the RIF is announced.", contactHR:"HR and employment counsel must be involved from the beginning. Do not identify individuals, set dates, or communicate anything internally until the full process has been reviewed and cleared." },
+  "Leave of Absence":         { icon:"🗓️", riskLevel:"medium", riskLabel:"Moderate Risk", description:"An employee needs extended time off for medical, family, personal, or other reasons. Different leave types carry different legal protections. Getting the leave type wrong is a common and costly error.", examples:["An employee requesting 6 weeks off following a surgery with a slow recovery.","A team member needing intermittent leave to care for a parent with a chronic illness.","An employee who has exhausted PTO and is asking for unpaid leave due to a mental health condition.","A new parent requesting leave beyond what the company's paid policy covers.","An employee called to active military duty requiring extended absence.","A team member experiencing a pregnancy complication requiring immediate time off.","An employee requesting leave to care for a seriously ill child or spouse.","Someone requesting a personal leave of absence for reasons unrelated to a medical condition."], docTips:["Record the date the employee first communicated the need for leave — even informally.","Document which leave type(s) apply and the basis for that determination.","Log all paperwork sent and received, including dates and delivery method.","Keep a record of any medical certifications, including when they were requested and received.","Document the return-to-work date, any extensions granted, and whether an accommodation review was conducted."], watch:"Assuming a leave request is just a 'time off' issue. Many leaves trigger FMLA, ADA, state leave law, or all three simultaneously.", contactHR:"If you are not certain which leave law applies — or if the employee has a medical condition involved in any way — contact HR before responding to the request." }
+};
+
+const QS = {
+  "Performance Decline":      [{q:"Have performance expectations been clearly communicated in writing?",hint:"Verbal expectations alone are harder to defend. Look for emails, job descriptions, goal-setting documents, or meeting notes.",weight:2,critical:false},{q:"Has this issue been documented in prior conversations or reviews?",hint:"A first documented conversation is fine — just make sure it is documented. Verbal-only history creates risk.",weight:1,critical:false},{q:"Has the employee been given a clear opportunity to respond to concerns?",hint:"This means a real conversation, not just an email. The employee should be able to explain context.",weight:1,critical:false},{q:"Is the performance decline consistent and ongoing (not a single incident)?",hint:"A pattern over time is stronger than one bad week. Consider whether something changed.",weight:1,critical:false},{q:"Are there known leave, medical, or accommodation factors at play?",hint:"If yes, or if you're not sure, stop and consult HR before taking any action.",weight:2,critical:true}],
+  "Attendance Issue":         [{q:"Is there a written attendance policy the employee has acknowledged?",hint:"Without a clear policy, enforcement is difficult to defend. Check your employee handbook.",weight:2,critical:false},{q:"Has the pattern been documented with dates and frequency?",hint:"A log of specific dates and context provided matters enormously if this progresses to discipline.",weight:1,critical:false},{q:"Has the employee been formally notified that attendance is an issue?",hint:"A documented conversation is required before formal discipline.",weight:1,critical:false},{q:"Have you confirmed that no protected leave applies to these absences?",hint:"FMLA, ADA, state sick leave, and other protections can cover absences you might otherwise count.",weight:2,critical:true},{q:"Has the policy been enforced consistently across your team?",hint:"If you have tolerated similar patterns from others, disciplining one person exposes you to disparate treatment claims.",weight:2,critical:false}],
+  "Interpersonal Conflict":   [{q:"Have you gathered facts from all parties involved, not just the complainant?",hint:"Acting on one person's account without hearing others is a procedural mistake.",weight:2,critical:false},{q:"Have you given each affected employee an opportunity to be heard?",hint:"This protects both the process and the employees.",weight:1,critical:false},{q:"Is the behavior materially affecting work output, team function, or the work environment?",hint:"Personality differences are not automatically an HR matter.",weight:1,critical:false},{q:"Are there prior documented incidents involving these individuals?",hint:"A pattern changes the situation significantly.",weight:1,critical:false},{q:"Is the situation escalating or involving behavior tied to a protected characteristic?",hint:"If the behavior involves race, gender, age, religion, or other protected characteristics, this may be harassment.",weight:2,critical:true}],
+  "Policy Violation":         [{q:"Is the policy written, accessible, and clearly worded?",hint:"Employees must have had reasonable access to the policy before the violation occurred.",weight:2,critical:false},{q:"Has this policy been applied consistently to others in similar situations?",hint:"Disciplining one person for a violation while ignoring the same behavior from others is a disparate treatment risk.",weight:2,critical:true},{q:"Would the employee reasonably have understood that this behavior violated policy?",hint:"Even with a written policy, enforcement requires the employee could reasonably have known this applied.",weight:1,critical:false},{q:"Is this a first offense, or is there prior disciplinary history?",hint:"Most progressive discipline frameworks require different responses for first vs. repeat violations.",weight:1,critical:false},{q:"Are there mitigating circumstances that warrant consideration before acting?",hint:"Long tenure, clean history, personal circumstances, or policy ambiguity are factors attorneys will ask about.",weight:1,critical:false}],
+  "Termination Consideration": [{q:"Is there documented progressive discipline (verbal, written, PIP if applicable)?",hint:"A clean progressive record is your primary defense against wrongful termination claims.",weight:2,critical:false},{q:"Was the employee given a genuine opportunity to improve with clear expectations?",hint:"PIPs and written warnings only protect you if the employee was given a real chance to meet them.",weight:1,critical:false},{q:"Are you following your organization's written termination process?",hint:"Many wrongful termination claims hinge on whether your own process was followed.",weight:2,critical:false},{q:"Is there any legal or protected-leave exposure connected to this employee?",hint:"Recent FMLA leave, ADA accommodation, protected complaint, or pregnancy all create heightened scrutiny.",weight:2,critical:true},{q:"Has HR or legal been consulted if required by your process or the circumstances?",hint:"For terminations with legal exposure flags, employment counsel should be involved before you act.",weight:2,critical:true}],
+  "Accommodation Request":    [{q:"Has the accommodation request been acknowledged and documented in writing?",hint:"Even a verbal request triggers obligations. The interactive process begins when the need is expressed.",weight:1,critical:false},{q:"Have you initiated the interactive process with the employee?",hint:"The interactive process means a real, documented conversation about what the employee needs. It is legally required.",weight:2,critical:true},{q:"Has HR or legal been informed and involved?",hint:"Accommodation decisions should not be made by a manager alone.",weight:2,critical:true},{q:"Have you obtained the necessary medical documentation (if applicable)?",hint:"You can request documentation confirming the need — but only ask for what is directly relevant.",weight:1,critical:false},{q:"Have you assessed whether accommodation creates undue hardship?",hint:"Undue hardship is a high legal bar. Most accommodations do not meet this threshold.",weight:1,critical:false}],
+  "Harassment / Discrimination": [{q:"Has the complaint been documented and acknowledged to the complainant?",hint:"The employee must know their complaint was received and taken seriously.",weight:1,critical:false},{q:"Is HR or legal already involved in this situation?",hint:"Non-negotiable for harassment and discrimination complaints.",weight:2,critical:true},{q:"Has the complainant been informed of their protections against retaliation?",hint:"This is a required communication in most jurisdictions. It should happen at the outset, in writing.",weight:1,critical:false},{q:"Is a neutral investigation underway or formally planned?",hint:"An investigation must be prompt, thorough, and conducted by someone without a conflict of interest.",weight:2,critical:true},{q:"Are the parties currently separated to minimize further harm while the investigation proceeds?",hint:"This may mean schedule adjustments or remote work — but must not punish the complainant.",weight:1,critical:false}],
+  "Retaliation Concern":      [{q:"Has the employee engaged in protected activity within the past 12 months?",hint:"Protected activity includes: filing an HR complaint, requesting accommodation, taking FMLA, participating in an investigation.",weight:2,critical:true},{q:"Is the adverse action you are considering closely timed to that activity?",hint:"Courts consider anything within a few weeks to a few months as potentially suspicious.",weight:2,critical:true},{q:"Has HR or legal reviewed the proposed action and its timing?",hint:"No adverse action should proceed in this context without independent review.",weight:2,critical:true},{q:"Is there documented, non-retaliatory business rationale that predates the protected activity?",hint:"If the issue existed before the complaint, show documentation that proves it.",weight:1,critical:false},{q:"Has the employee been informed of their anti-retaliation rights?",hint:"Most federal and state laws require this communication.",weight:1,critical:false}],
+  "Reduction in Force":       [{q:"Is there a documented, legitimate business rationale for the RIF?",hint:"Budget reduction, restructuring, role elimination — the reason must be real and documentable.",weight:2,critical:false},{q:"Were the selection criteria defined and applied consistently before individuals were identified?",hint:"Selection criteria must be established before you run the names.",weight:2,critical:true},{q:"Has legal reviewed the selection pool for adverse impact?",hint:"Run the statistical analysis: what percentage of each protected group is affected?",weight:2,critical:true},{q:"Have WARN Act obligations been assessed (for US employers)?",hint:"50+ employees laid off in 30 days at a single site may trigger 60-day advance notice requirements.",weight:2,critical:true},{q:"Are severance agreements and required disclosures prepared and legally reviewed?",hint:"Agreements offering severance in exchange for a release of claims must meet specific legal requirements.",weight:1,critical:false}],
+  "Leave of Absence":         [{q:"Have you confirmed whether the employee is eligible for leave under applicable law?",hint:"FMLA requires 12 months of employment and 1,250 hours. State laws often have lower thresholds.",weight:1,critical:false},{q:"Have you identified which type(s) of leave apply to this situation?",hint:"FMLA, ADA, state medical leave, parental leave, military leave — multiple laws can apply simultaneously.",weight:2,critical:true},{q:"Has the required paperwork been provided to the employee within the legally required timeframe?",hint:"FMLA requires a Notice of Eligibility within 5 business days.",weight:1,critical:false},{q:"Are all leave dates, communications, and medical certifications being documented?",hint:"This protects you if the employee later claims they were not approved.",weight:1,critical:false},{q:"Have you confirmed the return-to-work process and whether an accommodation review is needed?",hint:"An employee returning from medical leave may need an ADA accommodation review.",weight:1,critical:false}]
+};
+
+const STEPS = {
+  "Performance Decline":      {good:["Schedule a documented performance conversation this week with specific examples.","Issue a written memo confirming expectations, the gap, and what success looks like. Get a signature.","Set a structured check-in date 2–4 weeks out and put it on the calendar."],warn:["Review your documentation for completeness before scheduling any meeting.","Consult HR before issuing a formal PIP — confirm the process, timeline, and language.","Assess whether any accommodation or leave factors need to be cleared before proceeding."],risk:["Stop. Do not schedule any disciplinary meeting until HR has reviewed the full situation.","Pull together all documentation and present it to HR for a legal risk assessment.","Do not take any adverse action until cleared."]},
+  "Attendance Issue":         {good:["Issue a documented verbal or written reminder citing the specific policy and dates of concern.","Provide the employee a written copy of the attendance policy and note the delivery.","Set a 30-day monitoring window with clear expectations and a follow-up date."],warn:["Before issuing any discipline, confirm with HR that no protected leave applies.","Check whether others with similar patterns have been treated the same way.","Have HR review your proposed disciplinary action before delivery."],risk:["Pause all disciplinary action immediately. Do not issue any warnings yet.","Determine whether FMLA, ADA, state leave, or another protected category covers the absences.","Legal review is required before any adverse action can proceed."]},
+  "Interpersonal Conflict":   {good:["Facilitate a structured mediation conversation with clear ground rules and documented outcomes.","Issue a written summary of the conversation and expected behavioral changes to both parties.","Check in with both parties individually within two weeks to assess whether the resolution is holding."],warn:["Get written statements from all parties before taking any action.","Determine whether the behavior meets the threshold for a formal investigation.","Consult HR on whether this should remain a coaching situation or become a formal matter."],risk:["Treat this as a potential harassment or hostile work environment situation. Do not attempt to resolve it informally.","Initiate a formal investigation through HR.","Loop in HR and employment counsel before communicating anything to the parties."]},
+  "Policy Violation":         {good:["Issue appropriate discipline per your progressive discipline framework.","Document the violation, the evidence, and the disciplinary action taken. Get a signature.","Confirm in writing that the employee understands the policy and what a repeat offense would mean."],warn:["Before acting, audit whether this policy has been applied consistently across the team.","Confirm the policy was communicated and accessible before the violation occurred.","Have HR review the proposed disciplinary action and documentation before delivery."],risk:["Do not issue any discipline yet. Inconsistent enforcement creates disparate treatment liability.","Conduct a consistency audit across your team and document your findings.","HR and employment counsel must review before any action is taken."]},
+  "Termination Consideration": {good:["Proceed with termination following your written process. Do not improvise.","Prepare final pay, separation paperwork, and benefits information per applicable law.","Have HR present for the conversation. Keep it brief, factual, and document the meeting."],warn:["Do not schedule the termination meeting until documentation gaps are addressed.","Have HR assess whether a final written warning or extended PIP is required first.","Recheck leave and accommodation status — confirm there is no concurrent protected activity."],risk:["Stop. Do not schedule, communicate, or hint at the termination until legal review is complete.","Employment counsel must review the full documentation, timeline, and legal exposure before you proceed.","Any adverse action right now carries significant legal risk. Wait for clearance."]},
+  "Accommodation Request":    {good:["Continue the interactive process. Document every conversation, decision, and outcome.","Respond to the employee in writing with the accommodation decision and rationale.","Set a review date to assess whether the accommodation is working."],warn:["Initiate the interactive process immediately if it has not started. Delay is itself a violation.","Do not deny or informally dismiss the request without a documented HR and legal review.","Ensure every communication about the request is in writing and retained."],risk:["Do not take any adverse action while the accommodation request is pending.","Escalate to HR and employment counsel today. The interactive process must begin immediately.","Failure to engage the interactive process is an independent legal violation."]},
+  "Harassment / Discrimination": {good:["Ensure the investigation is conducted by a neutral party with no stake in the outcome.","Document all investigation steps, witness interviews, and findings in a formal written report.","Communicate the outcome to both the complainant and respondent as required by your policy."],warn:["Separate the parties immediately if they are in direct contact.","If HR is not already involved, escalate now. Today.","Confirm in writing to the complainant that retaliation is prohibited."],risk:["This requires immediate escalation to HR and employment counsel. No exceptions.","Do not attempt to resolve this informally or conduct the investigation yourself.","Preserve all related documents, emails, messages, and records. Do not delete anything."]},
+  "Retaliation Concern":      {good:["Document the business rationale for the adverse action independently of any prior protected activity.","Brief HR on the full timeline — when the protected activity occurred and when the performance issue arose.","Confirm the employee has received written notice of their anti-retaliation rights."],warn:["Have employment counsel review the timing and proposed rationale before taking any action.","Document the non-retaliatory reason in detail, with evidence that predates the protected activity.","Do not communicate the adverse action until legal review is complete."],risk:["Stop all adverse action immediately. Do not proceed with any next steps.","This situation requires employment counsel review before anything else happens.","Retaliation claims are among the most expensive HR legal exposures."]},
+  "Reduction in Force":       {good:["Proceed with separation meetings per your established RIF protocol and script.","Ensure all severance agreements comply with applicable law, including OWBPA for employees over 40.","Provide all required notices, benefits continuation information, and outplacement resources."],warn:["Complete the adverse impact analysis before finalizing the selection list.","Confirm WARN Act applicability with employment counsel before announcing dates.","Ensure every selection decision has a documented, non-discriminatory business rationale."],risk:["Do not proceed with any separations until employment counsel has signed off.","The adverse impact analysis and legal review are not optional.","WARN Act violations, adverse impact claims, and OWBPA defects all carry significant financial exposure."]},
+  "Leave of Absence":         {good:["Provide all required leave paperwork within the legally required timeframe.","Communicate clearly in writing about return-to-work expectations and the extension process.","Document all leave-related conversations, approvals, and certifications."],warn:["Identify the applicable leave type before taking any action.","Do not count leave-protected absences in any attendance discipline or performance review.","Consult HR on whether state leave laws provide protections beyond the federal minimum."],risk:["Stop. Taking any action while leave protections are unconfirmed is high-risk.","Escalate to HR today to identify all applicable leave laws and employer obligations.","Legal review is required before any action — including denial of leave or attendance discipline."]}
+};
+
+function computeScore(qs, answers) {
+  let wNo=0,total=0,crit=false,unk=0,yes=0,no=0;
+  qs.forEach((item,i)=>{ const a=answers[i]; total+=item.weight; if(a==="yes")yes++; if(a==="no"){no++;wNo+=item.weight;if(item.critical)crit=true;} if(a==="unknown"){unk++;wNo+=item.weight*0.75;if(item.critical)crit=true;} });
+  const ratio=wNo/total;
+  return { level:crit?"risk":ratio<=0.15?"good":ratio<=0.45?"warn":"risk", crit, unk, yes, no };
+}
+
+const C = {
+  good: { bg:"rgba(52,211,153,0.1)",  border:"rgba(52,211,153,0.3)",  text:"#34d399", light:"#a7f3d0" },
+  warn: { bg:"rgba(251,191,36,0.1)",  border:"rgba(251,191,36,0.3)",  text:"#fbbf24", light:"#fde68a" },
+  risk: { bg:"rgba(251,113,133,0.1)", border:"rgba(251,113,133,0.3)", text:"#fb7185", light:"#fecdd3" },
+};
+
+// ── PIN Gate Component ───────────────────────────────────────────────────
+function PinGate({ onUnlock, mode }) {
+  // mode: "enter" | "change"
+  const [pin, setPin]           = useState("");
+  const [newPin, setNewPin]     = useState("");
+  const [confirmPin, setConfirm]= useState("");
+  const [error, setError]       = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
+  const [changing, setChanging] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current && inputRef.current.focus(); }, [changing]);
+
+  const triggerShake = () => { setShakeKey(k=>k+1); };
+
+  const handleUnlock = async () => {
+    const hash = await sha256(pin);
+    const stored = loadPinHash();
+    if (hash === stored) { onUnlock(); }
+    else { setError("Incorrect PIN."); setPin(""); triggerShake(); }
+  };
+
+  const handleChange = async () => {
+    if (newPin.length < 4) { setError("PIN must be at least 4 characters."); return; }
+    if (newPin !== confirmPin) { setError("PINs do not match."); triggerShake(); return; }
+    const currentHash = await sha256(pin);
+    const stored = loadPinHash();
+    if (currentHash !== stored) { setError("Current PIN is incorrect."); setPin(""); triggerShake(); return; }
+    const newHash = await sha256(newPin);
+    savePinHash(newHash);
+    onUnlock();
+  };
+
+  const s = {
+    wrap: { padding:"24px 22px", textAlign:"center" },
+    lockIcon: { fontSize:"2rem", marginBottom:12 },
+    title: { fontSize:"0.9rem", fontWeight:700, color:"#f8fafc", marginBottom:6 },
+    sub: { fontSize:"0.78rem", color:"#8899aa", lineHeight:1.5, marginBottom:18 },
+    input: { width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:9, padding:"10px 14px", color:"#f8fafc", fontSize:"0.9rem", fontFamily:"inherit", outline:"none", textAlign:"center", letterSpacing:"0.2em", marginBottom:10 },
+    btn: (primary) => ({ width:"100%", padding:"10px", borderRadius:999, border:primary?"1px solid rgba(34,193,255,0.45)":"1px solid rgba(255,255,255,0.1)", background:primary?"rgba(34,193,255,0.12)":"rgba(255,255,255,0.04)", color:primary?"#22c1ff":"#f8fafc", cursor:"pointer", fontSize:"0.82rem", fontWeight:600, fontFamily:"inherit", marginBottom:8 }),
+    err: { fontSize:"0.77rem", color:"#fb7185", marginBottom:10, minHeight:18 },
+    link: { fontSize:"0.72rem", color:"rgba(34,193,255,0.55)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, marginTop:4 },
+  };
+
+  if (!changing) return (
+    <div style={s.wrap}>
+      <div style={s.lockIcon}>🔒</div>
+      <div style={s.title}>HR Access Only</div>
+      <div style={s.sub}>Enter your HR PIN to upload or manage company policies. Default PIN is 1234 — change it after first login.</div>
+      <div key={shakeKey} className={shakeKey ? "shake" : ""}>
+        <input ref={inputRef} style={s.input} type="password" placeholder="Enter PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleUnlock()} maxLength={20} />
+      </div>
+      <div style={s.err}>{error}</div>
+      <button style={s.btn(true)} onClick={handleUnlock}>Unlock</button>
+      <button style={s.link} onClick={()=>{ setChanging(true); setError(""); setPin(""); }}>Change PIN</button>
+    </div>
+  );
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.lockIcon}>🔑</div>
+      <div style={s.title}>Change HR PIN</div>
+      <div style={s.sub}>Enter your current PIN, then set a new one.</div>
+      <input style={s.input} type="password" placeholder="Current PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} maxLength={20} />
+      <input style={s.input} type="password" placeholder="New PIN (min 4 characters)" value={newPin} onChange={e=>{ setNewPin(e.target.value); setError(""); }} maxLength={20} />
+      <div key={shakeKey} className={shakeKey ? "shake" : ""}>
+        <input style={s.input} type="password" placeholder="Confirm new PIN" value={confirmPin} onChange={e=>{ setConfirm(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleChange()} maxLength={20} />
+      </div>
+      <div style={s.err}>{error}</div>
+      <button style={s.btn(true)} onClick={handleChange}>Save new PIN</button>
+      <button style={s.link} onClick={()=>{ setChanging(false); setError(""); }}>Back</button>
+    </div>
+  );
+}
+
+// ── Policy Library Modal ─────────────────────────────────────────────────
+function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook }) {
+  const [tab, setTab]                     = useState("view");
+  const [unlocked, setUnlocked]           = useState(false);
+  const [pasteText, setPasteText]         = useState("");
+  const [pasteName, setPasteName]         = useState("");
+  const [pasteCategory, setPasteCat]      = useState("handbook");
+  const [dragActive, setDragActive]       = useState(false);
+  const [viewDoc, setViewDoc]             = useState(null);
+  const [editingId, setEditingId]         = useState(null);
+  const [showReset, setShowReset]         = useState(false);
+  const [hrEmailInput, setHrEmailInput]   = useState(hrEmail||"");
+  const [hrEmailSaved, setHrEmailSaved]   = useState(false);
+  const [hrEmailSaving, setHrEmailSaving] = useState(false);
+  const [hrEmailError, setHrEmailError]   = useState(false);
+  useEffect(() => { setHrEmailInput(hrEmail||""); }, [hrEmail]);
+  const [slackInput, setSlackInput]       = useState(slackWebhook||"");
+  const [slackSaved, setSlackSaved]       = useState(false);
+  const [teamsInput, setTeamsInput]       = useState(teamsWebhook||"");
+  const [teamsSaved, setTeamsSaved]       = useState(false);
+  const [hrSubmissions, setHrSubmissions] = useState(()=>loadHrSubmissions());
+  const [viewingSub, setViewingSub]       = useState(null);
+  const fileRef = useRef(null);
+
+  const readFile = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
+      reader.onload = (e) => {
+        const matches = (e.target.result || "").match(/[^\x00-\x1F\x7F-\xFF]{4,}/g) || [];
+        const extracted = matches.filter(s=>s.trim().length>3).join(" ").substring(0,50000);
+        resolve({ name:file.name, text:extracted||"[PDF uploaded. Text extraction is limited — for best results, use Paste Text instead.]", size:file.size });
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
+      reader.readAsText(file);
+    }
+  });
+
+  const handleFiles = async (files) => {
+    const results = [];
+    for (const file of Array.from(files)) {
+      if (file.size > 5*1024*1024) { alert(`${file.name} is over 5MB. Please paste the text directly.`); continue; }
+      const { name, text } = await readFile(file);
+      const lower = (name+" "+text.substring(0,500)).toLowerCase();
+      let autoCategory = "other";
+      if (lower.match(/attendance|absent|tardiness|late|leave policy/)) autoCategory = "attendance";
+      else if (lower.match(/performance|pip|improvement|coaching|discipline/)) autoCategory = "performance";
+      else if (lower.match(/handbook|code of conduct|workplace policy/)) autoCategory = "handbook";
+      else if (lower.match(/accommodat|ada|disability|reasonable/)) autoCategory = "accommodation";
+      else if (lower.match(/termination|separation|severance|rif|layoff/)) autoCategory = "separation";
+      else if (lower.match(/harassment|discrimination|eeoc|complaint/)) autoCategory = "conduct";
+      results.push({ id:Date.now()+Math.random(), name, text, category:autoCategory, addedAt:new Date().toLocaleDateString(), chars:text.length });
+    }
+    if (results.length) { const u=[...policies,...results]; setPolicies(u); savePolicies(u); setTab("view"); }
+  };
+
+  const addPaste = () => {
+    if (!pasteText.trim()) return;
+    const doc = { id:Date.now(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
+    const u=[...policies,doc]; setPolicies(u); savePolicies(u); setPasteText(""); setPasteName(""); setTab("view");
+  };
+
+  const removeDoc = (id) => {
+    const u=policies.filter(p=>p.id!==id); setPolicies(u); savePolicies(u);
+    if (viewDoc&&viewDoc.id===id) setViewDoc(null);
+  };
+
+  const updateCategory = (id, cat) => { const u=policies.map(p=>p.id===id?{...p,category:cat}:p); setPolicies(u); savePolicies(u); };
+
+  const handleReset = () => {
+    if (!window.confirm("This will delete all stored policies and reset the PIN to 1234. This cannot be undone.")) return;
+    savePolicies([]); setPolicies([]); savePinHash(DEFAULT_PIN_HASH);
+    setShowReset(false); setUnlocked(false); setTab("view");
+  };
+
+  const relevantDocs = currentScenario
+    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(currentScenario)||cat.id==="handbook"||cat.id==="other"); })
+    : policies;
+
+  const s = {
+    overlay: { position:"fixed", inset:0, background:"rgba(2,6,23,0.88)", zIndex:1000, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"20px 16px", overflowY:"auto" },
+    modal:   { width:"100%", maxWidth:680, background:"linear-gradient(160deg,#0a1628,#060f1e)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:18, overflow:"hidden", marginTop:8 },
+    header:  { padding:"18px 22px", borderBottom:"1px solid rgba(255,255,255,0.07)", display:"flex", alignItems:"center", justifyContent:"space-between" },
+    tab:     (active) => ({ padding:"7px 14px", borderRadius:999, border:"none", cursor:"pointer", fontSize:"0.78rem", fontWeight:600, fontFamily:"inherit", background:active?"rgba(34,193,255,0.15)":"transparent", color:active?"#22c1ff":"#8899aa", transition:"all .15s", position:"relative" }),
+    btn:     (primary) => ({ padding:primary?"9px 18px":"7px 14px", borderRadius:999, border:primary?"1px solid rgba(34,193,255,0.45)":"1px solid rgba(255,255,255,0.1)", background:primary?"rgba(34,193,255,0.12)":"rgba(255,255,255,0.04)", color:primary?"#22c1ff":"#f8fafc", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, fontFamily:"inherit" }),
+    input:   { width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"9px 12px", color:"#f8fafc", fontSize:"0.83rem", fontFamily:"inherit", outline:"none" },
+    select:  { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8, padding:"7px 10px", color:"#f8fafc", fontSize:"0.8rem", fontFamily:"inherit", outline:"none", cursor:"pointer" },
+  };
+
+  const lockBadge = (
+    <span style={{ fontSize:"0.6rem", verticalAlign:"middle", marginLeft:5, padding:"1px 5px", borderRadius:4, background:"rgba(251,113,133,0.15)", color:"#fb7185", border:"1px solid rgba(251,113,133,0.25)", fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase" }}>HR</span>
+  );
+
+  return (
+    <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={s.modal} className="fade-in">
+        {/* Header */}
+        <div style={s.header}>
+          <div>
+            <div style={{ fontSize:"1rem", fontWeight:700 }}>Company Policies</div>
+            <div style={{ fontSize:"0.78rem", color:"#8899aa", marginTop:2 }}>
+              {policies.length===0 ? "No documents on file" : `${policies.length} document${policies.length!==1?"s":""} stored in this browser`}
+            </div>
+          </div>
+          <button onClick={onClose} style={s.btn(false)}>Close</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex", gap:4, padding:"12px 22px 0", borderBottom:"1px solid rgba(255,255,255,0.07)", flexWrap:"wrap" }}>
+          <button style={s.tab(tab==="view")} onClick={()=>{ setTab("view"); setViewDoc(null); }}>
+            View Policies {policies.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{policies.length}</span>}
+          </button>
+          <button style={s.tab(tab==="upload")} onClick={()=>setTab("upload")}>
+            Upload Files {lockBadge}
+          </button>
+          <button style={s.tab(tab==="paste")} onClick={()=>setTab("paste")}>
+            Paste Text {lockBadge}
+          </button>
+          <button style={s.tab(tab==="dashboard")} onClick={()=>{ setTab("dashboard"); setViewingSub(null); }}>
+            HR Dashboard {lockBadge}{hrSubmissions.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{hrSubmissions.length}</span>}
+          </button>
+        </div>
+
+        <div style={{ padding:"20px 22px" }}>
+
+          {/* VIEW TAB — always open */}
+          {tab==="view" && (
+            <div>
+              {policies.length===0 ? (
+                <div style={{ textAlign:"center", padding:"32px 0", color:"#8899aa" }}>
+                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📁</div>
+                  <div style={{ fontSize:"0.88rem" }}>No policies on file yet.</div>
+                  <div style={{ fontSize:"0.79rem", marginTop:6, color:"#667788" }}>HR can add documents using the Upload or Paste tabs.</div>
+                </div>
+              ) : viewDoc ? (
+                <div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                    <button style={s.btn(false)} onClick={()=>setViewDoc(null)}>Back</button>
+                    <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{viewDoc.name}</div>
+                  </div>
+                  <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"rgba(248,250,252,0.8)", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                    {viewDoc.text}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {currentScenario && relevantDocs.length>0 && relevantDocs.length<policies.length && (
+                    <div style={{ background:"rgba(52,211,153,0.07)", border:"1px solid rgba(52,211,153,0.2)", borderRadius:9, padding:"9px 13px", fontSize:"0.79rem", color:"rgba(52,211,153,0.9)", marginBottom:14 }}>
+                      {relevantDocs.length} of {policies.length} documents are relevant to the current scenario.
+                    </div>
+                  )}
+                  {policies.map(doc=>{
+                    const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category);
+                    const isRelevant=currentScenario&&relevantDocs.find(d=>d.id===doc.id);
+                    return (
+                      <div key={doc.id} style={{ background:isRelevant?"rgba(34,193,255,0.05)":"rgba(255,255,255,0.03)", border:`1px solid ${isRelevant?"rgba(34,193,255,0.2)":"rgba(255,255,255,0.07)"}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"flex-start", gap:12 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                            <span style={{ fontWeight:700, fontSize:"0.85rem" }}>{doc.name}</span>
+                            {isRelevant && <span style={{ fontSize:"0.62rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", background:"rgba(34,193,255,0.12)", border:"1px solid rgba(34,193,255,0.25)", color:"#22c1ff", borderRadius:4, padding:"1px 6px" }}>Relevant</span>}
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                            {unlocked && editingId===doc.id ? (
+                              <select style={{ ...s.select, fontSize:"0.73rem", padding:"3px 8px" }} value={doc.category} onChange={e=>{ updateCategory(doc.id,e.target.value); setEditingId(null); }}>
+                                {POLICY_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                              </select>
+                            ) : (
+                              <span onClick={()=>unlocked&&setEditingId(doc.id)} style={{ fontSize:"0.69rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:5, cursor:unlocked?"pointer":"default", background:`${cat?.color}18`, color:cat?.color, border:`1px solid ${cat?.color}30` }}>{cat?.label}</span>
+                            )}
+                            <span style={{ fontSize:"0.72rem", color:"#8899aa" }}>{(doc.chars/1000).toFixed(1)}k chars · {doc.addedAt}</span>
+                          </div>
+                          <div style={{ fontSize:"0.76rem", color:"rgba(248,250,252,0.5)", marginTop:5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                            {doc.text.substring(0,120).replace(/\s+/g," ")}...
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                          <button style={s.btn(false)} onClick={()=>setViewDoc(doc)}>View</button>
+                          {unlocked && <button style={{ ...s.btn(false), color:"#fb7185", borderColor:"rgba(251,113,133,0.2)" }} onClick={()=>removeDoc(doc.id)}>Remove</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* UPLOAD TAB — PIN gated */}
+          {tab==="upload" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.65)", lineHeight:1.6, marginBottom:14 }}>
+                  Upload policy documents, handbook sections, or any HR reference material. Supported: .txt, .pdf, .doc, .docx, .md up to 5MB. Files stay in this browser only.
+                </div>
+                <div
+                  style={{ border:`2px dashed ${dragActive?"rgba(34,193,255,0.6)":"rgba(255,255,255,0.12)"}`, background:dragActive?"rgba(34,193,255,0.06)":"rgba(255,255,255,0.02)", borderRadius:12, padding:"32px 24px", textAlign:"center", cursor:"pointer", transition:"all .15s", marginBottom:14 }}
+                  onClick={()=>fileRef.current.click()}
+                  onDragOver={e=>{e.preventDefault();setDragActive(true);}}
+                  onDragLeave={()=>setDragActive(false)}
+                  onDrop={e=>{e.preventDefault();setDragActive(false);handleFiles(e.dataTransfer.files);}}
+                >
+                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📂</div>
+                  <div style={{ fontSize:"0.88rem", fontWeight:600, color:"#f8fafc", marginBottom:4 }}>Drop files here or click to browse</div>
+                  <div style={{ fontSize:"0.76rem", color:"#8899aa" }}>.txt, .pdf, .doc, .docx, .md — up to 5MB each</div>
+                  <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
+                </div>
+                <div style={{ background:"rgba(34,193,255,0.06)", border:"1px solid rgba(34,193,255,0.15)", borderRadius:9, padding:"10px 14px", fontSize:"0.78rem", color:"rgba(34,193,255,0.85)", lineHeight:1.5, marginBottom:16 }}>
+                  PDF tip: Text extraction from PDFs is limited. For better results, copy the text and use the Paste Text tab.
+                </div>
+                {/* Change PIN + Reset — only visible when unlocked */}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>{ setUnlocked(false); }}>Change PIN</button>
+                  {!showReset
+                    ? <button style={{ ...s.btn(false), fontSize:"0.74rem", color:"#fb7185", borderColor:"rgba(251,113,133,0.2)" }} onClick={()=>setShowReset(true)}>Reset all policies + PIN</button>
+                    : <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <span style={{ fontSize:"0.76rem", color:"#fb7185" }}>This deletes everything.</span>
+                        <button style={{ ...s.btn(false), fontSize:"0.74rem", color:"#fb7185", borderColor:"rgba(251,113,133,0.35)" }} onClick={handleReset}>Confirm reset</button>
+                        <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setShowReset(false)}>Cancel</button>
+                      </div>
+                  }
+                </div>
+                {/* HR Settings */}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:14, marginTop:6 }}>
+                  <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>HR Email Address</div>
+                  <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:8 }}>Employees can send check results directly to this address using the "Send to HR" button on result screens.</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); setHrEmailError(false); }} />
+                    <button style={{ ...s.btn(true), opacity:hrEmailSaving?0.6:1 }} disabled={hrEmailSaving} onClick={async()=>{
+                      setHrEmailSaving(true); setHrEmailError(false);
+                      try { await onSaveHrEmail(hrEmailInput.trim()); setHrEmailSaved(true); }
+                      catch(e) { setHrEmailError(true); }
+                      setHrEmailSaving(false);
+                    }}>{hrEmailSaving?"Saving...":"Save"}</button>
+                  </div>
+                  {hrEmailSaved && <div style={{ fontSize:"0.77rem", color:"#34d399", marginTop:6 }}>Saved — applies to every device.</div>}
+                  {hrEmailError && <div style={{ fontSize:"0.77rem", color:"#fb7185", marginTop:6 }}>Couldn't save. Check your connection and try again.</div>}
+                </div>
+                {/* Notifications */}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:14, marginTop:6 }}>
+                  <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>Channel Notifications</div>
+                  <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:12 }}>When a check is sent to HR, a notification card is posted to the configured channels. Paste the incoming webhook URL from Slack or Teams.</div>
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:"0.69rem", color:"#8899aa", marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ background:"rgba(74,144,226,0.15)", border:"1px solid rgba(74,144,226,0.3)", color:"#4a90e2", borderRadius:4, padding:"1px 6px", fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>Slack</span>
+                      Incoming Webhook URL
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); }} />
+                      <button style={s.btn(true)} onClick={()=>{ onSaveSlackWebhook(slackInput.trim()); setSlackSaved(true); }}>Save</button>
+                    </div>
+                    {slackSaved && <div style={{ fontSize:"0.77rem", color:"#34d399", marginTop:5 }}>Saved.</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:"0.69rem", color:"#8899aa", marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ background:"rgba(98,100,167,0.15)", border:"1px solid rgba(98,100,167,0.3)", color:"#9b9de8", borderRadius:4, padding:"1px 6px", fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>Teams</span>
+                      Incoming Webhook URL
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); }} />
+                      <button style={s.btn(true)} onClick={()=>{ onSaveTeamsWebhook(teamsInput.trim()); setTeamsSaved(true); }}>Save</button>
+                    </div>
+                    {teamsSaved && <div style={{ fontSize:"0.77rem", color:"#34d399", marginTop:5 }}>Saved.</div>}
+                  </div>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* PASTE TAB — PIN gated */}
+          {tab==="paste" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.65)", lineHeight:1.6, marginBottom:14 }}>
+                  Paste policy text directly. Useful for PDFs, copied handbook sections, or any text-based reference material.
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Document name</div>
+                  <input style={s.input} placeholder="e.g. Attendance Policy, Handbook Section 4..." value={pasteName} onChange={e=>setPasteName(e.target.value)} />
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Category</div>
+                  <select style={s.select} value={pasteCategory} onChange={e=>setPasteCat(e.target.value)}>
+                    {POLICY_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Policy text</div>
+                  <textarea rows={10} style={{ ...s.input, resize:"vertical" }} placeholder="Paste your policy text here..." value={pasteText} onChange={e=>setPasteText(e.target.value)} />
+                </div>
+                <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:16 }}>
+                  <button style={s.btn(true)} onClick={addPaste} disabled={!pasteText.trim()}>Save to library</button>
+                  <span style={{ fontSize:"0.74rem", color:"#8899aa" }}>{pasteText.length.toLocaleString()} characters</span>
+                </div>
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:14, display:"flex", gap:8 }}>
+                  <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setUnlocked(false)}>Change PIN</button>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* HR DASHBOARD TAB — PIN gated */}
+          {tab==="dashboard" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                {hrSubmissions.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"32px 0", color:"#8899aa" }}>
+                    <div style={{ fontSize:"2rem", marginBottom:8 }}>📬</div>
+                    <div style={{ fontSize:"0.88rem" }}>No checks submitted to HR yet.</div>
+                    <div style={{ fontSize:"0.79rem", marginTop:6, color:"#667788" }}>When someone uses "Send to HR" on their results screen, the check will appear here.</div>
+                  </div>
+                ) : viewingSub ? (()=>{
+                  const sub = viewingSub;
+                  const col = C[sub.level];
+                  const eqs = QS[sub.scenario];
+                  const labels = {good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+                  const statusColors = {pending:"#fbbf24",reviewing:"#22c1ff",resolved:"#34d399"};
+                  const statusLabels = {pending:"Pending Review",reviewing:"In Review",resolved:"Resolved"};
+                  const updateSub = (patch) => {
+                    const patched = {...sub,...patch};
+                    const updated = hrSubmissions.map(s=>s.id===sub.id?patched:s);
+                    setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(patched);
+                  };
+                  return (
+                    <div>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+                        <button style={s.btn(false)} onClick={()=>setViewingSub(null)}>Back</button>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                          {sub.employeeName && <div style={{ fontSize:"0.79rem", color:"#22c1ff", marginTop:2 }}>{sub.employeeName}</div>}
+                          <div style={{ fontSize:"0.72rem", color:"#8899aa", marginTop:1 }}>{sub.sentDate} at {sub.sentTime}</div>
+                        </div>
+                        <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}`, flexShrink:0 }}>{labels[sub.level]}</span>
+                      </div>
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:7 }}>Status</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {Object.entries(statusLabels).map(([k,v])=>(
+                            <button key={k} style={{ padding:"5px 13px", borderRadius:999, border:`1px solid ${(sub.status||"pending")===k?`${statusColors[k]}66`:"rgba(255,255,255,0.12)"}`, background:(sub.status||"pending")===k?`${statusColors[k]}18`:"transparent", color:(sub.status||"pending")===k?statusColors[k]:"#8899aa", cursor:"pointer", fontSize:"0.75rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>updateSub({status:k})}>{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6 }}>HR Notes</div>
+                        <textarea rows={3} style={{ ...s.input, resize:"vertical", fontSize:"16px" }} placeholder="Add internal notes about this check..." value={sub.hrNotes||""} onChange={e=>updateSub({hrNotes:e.target.value})} />
+                      </div>
+                      <div style={{ borderTop:"1px solid rgba(255,255,255,0.07)", paddingTop:12, marginBottom:12 }}>
+                        <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:9 }}>Submitted answers</div>
+                        {eqs.map((item,i)=>{ const a=sub.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"#34d399":a==="no"?"#fb7185":"#fbbf24";
+                          return (
+                            <div key={i} style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:9, marginTop:9 }}>
+                              <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"rgba(248,250,252,0.8)", marginBottom:3 }}>
+                                {item.critical&&<span style={{ fontSize:"0.6rem", fontWeight:700, textTransform:"uppercase", background:"rgba(251,113,133,0.12)", border:"1px solid rgba(251,113,133,0.3)", color:"#fb7185", borderRadius:4, padding:"1px 5px", marginRight:6 }}>Critical</span>}
+                                {item.q}
+                              </div>
+                              <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
+                              {sub.notes[i] && <div style={{ fontSize:"0.76rem", color:"#8899aa", marginTop:3, fontStyle:"italic" }}>{sub.notes[i]}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button style={{ ...s.btn(false), fontSize:"0.74rem", color:"#fb7185", borderColor:"rgba(251,113,133,0.2)" }} onClick={()=>{ const updated=hrSubmissions.filter(s=>s.id!==sub.id); setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(null); }}>Delete this record</button>
+                    </div>
+                  );
+                })() : (
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ fontSize:"0.72rem", color:"#fb7185", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ if(!window.confirm("Delete all HR submissions? This cannot be undone."))return; saveHrSubmissions([]); setHrSubmissions([]); }}>Clear all</button>
+                    </div>
+                    {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"#fbbf24",reviewing:"#22c1ff",resolved:"#34d399"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"};
+                      return (
+                        <div key={sub.id} onClick={()=>setViewingSub(sub)} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"11px 14px", marginBottom:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                            <div style={{ fontSize:"0.72rem", color:"#8899aa", marginTop:1 }}>{sub.employeeName?<span style={{ color:"rgba(248,250,252,0.6)", marginRight:6 }}>{sub.employeeName} ·</span>:null}{sub.sentDate}</div>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                            <span style={{ fontSize:"0.63rem", fontWeight:700, textTransform:"uppercase", padding:"2px 6px", borderRadius:4, background:`${statusColors[sub.status||"pending"]}18`, color:statusColors[sub.status||"pending"], border:`1px solid ${statusColors[sub.status||"pending"]}44` }}>{statusLabels[sub.status||"pending"]}</span>
+                            <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 6px", borderRadius:4, background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[sub.level]}</span>
+                            <span style={{ fontSize:"0.72rem", color:"#8899aa" }}>View →</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contextual policy snippet during questions ───────────────────────────
+function PolicyHint({ policies, scenario }) {
+  const [expanded, setExpanded] = useState(false);
+  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+  if (relevant.length===0) return null;
+  return (
+    <div style={{ background:"rgba(34,193,255,0.05)", border:"1px solid rgba(34,193,255,0.18)", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:"0.82rem" }}>📄</span>
+          <span style={{ fontSize:"0.8rem", fontWeight:600, color:"#22c1ff" }}>{relevant.length} company document{relevant.length!==1?"s":""} on file for this scenario</span>
+        </div>
+        <button onClick={()=>setExpanded(v=>!v)} style={{ fontSize:"0.71rem", color:"rgba(34,193,255,0.65)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600 }}>
+          {expanded?"Hide":"Show"}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ marginTop:10 }}>
+          {relevant.map(doc=>(
+            <div key={doc.id} style={{ background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"9px 11px", marginBottom:6 }}>
+              <div style={{ fontSize:"0.77rem", fontWeight:700, color:"#f8fafc", marginBottom:4 }}>{doc.name}</div>
+              <div style={{ fontSize:"0.74rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, maxHeight:120, overflowY:"auto", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                {doc.text.substring(0,600)}{doc.text.length>600?"...":""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────
+function App() {
+  const [step, setStep]               = useState("pick");
+  const [scenario, setScenario]       = useState(null);
+  const [answers, setAnswers]         = useState([]);
+  const [notes, setNotes]             = useState([]);
+  const [hints, setHints]             = useState([]);
+  const [history, setHistory]         = useState([]);
+  const [copied, setCopied]           = useState(false);
+  const [showDocTips, setShowDocTips] = useState(false);
+  const [savedSession, setSavedSession]     = useState(null);
+  const [showResumeBanner, setShowResume]   = useState(false);
+  const [policies, setPolicies]       = useState([]);
+  const [showPolicyLib, setShowPolicyLib]   = useState(false);
+  const [emailAddr, setEmailAddr]           = useState("");
+  const [emailStatus, setEmailStatus]       = useState("idle");
+  const [checkHistory, setCheckHistory]     = useState([]);
+  const [viewingPast, setViewingPast]       = useState(null);
+  const [showHistory, setShowHistory]       = useState(false);
+  const [employeeName, setEmployeeName]     = useState("");
+  const [hrEmail, setHrEmail]               = useState("");
+  const [hrEmailStatus, setHrEmailStatus]   = useState("idle");
+  const [attachments, setAttachments]       = useState([]);
+  const fileInputRef                        = useRef(null);
+  const [followups, setFollowups]           = useState([]);
+  const [followupSaved, setFollowupSaved]   = useState(false);
+  const [slackWebhook, setSlackWebhook]     = useState("");
+  const [teamsWebhook, setTeamsWebhook]     = useState("");
+
+  useEffect(() => {
+    setPolicies(loadPolicies()); setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
+  }, []);
+  useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
+  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
+
+  const resumeSession = () => {
+    if (!savedSession) return;
+    const n=QS[savedSession.scenario].length;
+    setScenario(savedSession.scenario); setStep(savedSession.step);
+    setAnswers(savedSession.answers&&savedSession.answers.length===n?savedSession.answers:new Array(n).fill(null));
+    setNotes(savedSession.notes&&savedSession.notes.length===n?savedSession.notes:new Array(n).fill(""));
+    setHints(new Array(n).fill(false)); setHistory(savedSession.history||[]);
+    setShowResume(false); setSavedSession(null);
+  };
+  const dismissResume = () => { setShowResume(false); setSavedSession(null); clearSession(); };
+
+  const m  = scenario ? META[scenario] : null;
+  const qs = scenario ? QS[scenario]   : [];
+  const answered = answers.filter(a=>a!==null).length;
+  const allDone  = qs.length>0 && answered===qs.length;
+  const sc       = allDone ? computeScore(qs,answers) : null;
+  const liveLevel = () => { if(!answered)return"neutral"; return computeScore(qs,answers).level; };
+
+  const buildReportLines = (forHR) => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const lines = [forHR?`People Action Check — Submitted for Review`:`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    if(!forHR){
+      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+      if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
+    }
+    if(attachments.length){ lines.push("","--- Attached files:"); attachments.forEach(f=>lines.push(`- ${f.name}`)); }
+    lines.push("","General guidance only — not legal advice.");
+    return lines;
+  };
+
+  const buildReportDocxBase64 = async () => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const children = [
+      new Paragraph({ text: "People Action Check Report", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ children: [new TextRun({ text: `Scenario: ${scenario}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `Result: ${ll2}`, bold: true })] }),
+      new Paragraph({ text: `Date: ${new Date().toLocaleDateString()}` }),
+    ];
+    if (employeeName.trim()) children.push(new Paragraph({ text: `Employee: ${employeeName.trim()}` }));
+    children.push(new Paragraph({ text: "" }));
+    children.push(new Paragraph({ text: "Questions & Answers", heading: HeadingLevel.HEADING_2 }));
+    qs.forEach((item,i)=>{
+      const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know";
+      children.push(new Paragraph({ children:[new TextRun({ text:`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`, bold:true })] }));
+      children.push(new Paragraph({ text:`Answer: ${label}` }));
+      if (notes[i]) children.push(new Paragraph({ text:`Note: ${notes[i]}` }));
+      children.push(new Paragraph({ text:"" }));
+    });
+    children.push(new Paragraph({ text: "Recommended Next Steps", heading: HeadingLevel.HEADING_2 }));
+    STEPS[scenario][sc.level].forEach((st,i)=> children.push(new Paragraph({ text:`${i+1}. ${st}` })));
+    const imageAttachments = attachments.filter(f=>f.type && f.type.startsWith("image/"));
+    const otherAttachments = attachments.filter(f=>!(f.type && f.type.startsWith("image/")));
+    if (imageAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Attached Images", heading: HeadingLevel.HEADING_2 }));
+      imageAttachments.forEach(f=>{
+        children.push(new Paragraph({ text: f.name }));
+        try {
+          children.push(new Paragraph({ children: [ new ImageRun({ data: dataUrlToBytes(f.dataUrl), transformation: { width: 400, height: 300 } }) ] }));
+        } catch(e) {}
+        children.push(new Paragraph({ text:"" }));
+      });
+    }
+    if (otherAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Other Attached Files (sent separately with this email)", heading: HeadingLevel.HEADING_2 }));
+      otherAttachments.forEach(f=> children.push(new Paragraph({ text: `- ${f.name}` })));
+    }
+    children.push(new Paragraph({ text:"" }));
+    children.push(new Paragraph({ text: "General guidance only — not legal advice." }));
+    const doc = new Document({ sections: [{ children }] });
+    return Packer.toBase64String(doc);
+  };
+
+  const downloadReport = async () => {
+    if (!sc) return;
+    const base64 = await buildReportDocxBase64();
+    const bytes = dataUrlToBytes(`data:application/octet-stream;base64,${base64}`);
+    const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `HR-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFilesSelected = (fileList) => {
+    Array.from(fileList).forEach(file=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, { name:file.name, type:file.type, size:file.size, dataUrl:reader.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  const removeAttachment = (idx) => setAttachments(prev => prev.filter((_,i)=>i!==idx));
+
+  const sendEmail = async () => {
+    if (!sc || !emailAddr.includes("@")) return;
+    setEmailStatus("sending");
+    try {
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:emailAddr, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
+      setEmailStatus("sent");
+    } catch(e) { setEmailStatus("error"); }
+  };
+
+  const notifyWebhook = (webhookUrl, data) => {
+    if (!webhookUrl) return;
+    const ll2 = data.level==="good"?"Low Risk":data.level==="warn"?"Elevated Risk":"High Risk";
+    const emoji = data.level==="good"?"🟢":data.level==="warn"?"🟡":"🔴";
+    const themeColor = data.level==="good"?"38A169":data.level==="warn"?"D69E2E":"E53E3E";
+    const steps = STEPS[data.scenario][data.level];
+    const stepsText = steps.map((s,i)=>`${i+1}. ${s}`).join("\n");
+    const isTeams = webhookUrl.includes("office.com") || webhookUrl.includes("webhook.office") || webhookUrl.includes("teams.microsoft");
+    const payload = isTeams ? {
+      "@type":"MessageCard", "@context":"https://schema.org/extensions",
+      "summary":`People Action Check — ${data.scenario} — ${ll2}`,
+      "themeColor":themeColor,
+      "title":`People Action Check — ${data.scenario}`,
+      "sections":[{ "facts":[
+        {"name":"Result","value":`${emoji} ${ll2}`},
+        ...(data.employeeName?[{"name":"Employee","value":data.employeeName}]:[]),
+        {"name":"Date","value":data.sentDate},
+        {"name":"Scenario","value":data.scenario}
+      ], "text":`**Recommended next steps:**\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join("\n\n")}` }]
+    } : {
+      "text":`People Action Check — ${data.scenario} — ${ll2}`,
+      "blocks":[
+        {"type":"header","text":{"type":"plain_text","text":`People Action Check — ${data.scenario}`,"emoji":true}},
+        {"type":"section","fields":[
+          {"type":"mrkdwn","text":`*Result:*\n${emoji} ${ll2}`},
+          ...(data.employeeName?[{"type":"mrkdwn","text":`*Employee:*\n${data.employeeName}`}]:[]),
+          {"type":"mrkdwn","text":`*Date:*\n${data.sentDate}`}
+        ]},
+        {"type":"section","text":{"type":"mrkdwn","text":`*Recommended next steps:*\n${stepsText}`}},
+        {"type":"divider"},
+        {"type":"context","elements":[{"type":"mrkdwn","text":"People Action Check · General guidance only, not legal advice"}]}
+      ]
+    };
+    fetch("/api/notify", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({webhookUrl,payload}) }).catch(()=>{});
+  };
+
+  const sendToHR = async () => {
+    if (!sc || !hrEmail.includes("@")) return;
+    setHrEmailStatus("sending");
+    try {
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — People Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
+      const submission = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
+      const updated = [submission, ...loadHrSubmissions()];
+      saveHrSubmissions(updated);
+      notifyWebhook(slackWebhook, submission);
+      notifyWebhook(teamsWebhook, submission);
+      setHrEmailStatus("sent");
+    } catch(e) { setHrEmailStatus("error"); }
+  };
+
+  const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
+  const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
+  const ans   = (idx,val) => {
+    const next=[...answers]; next[idx]=val; setAnswers(next);
+    if(next.every(a=>a!==null)){
+      const{level}=computeScore(qs,next);
+      setHistory(h=>[{scenario,level,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...h]);
+      const entry={ id:Date.now(), scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim() };
+      setCheckHistory(h=>{ const updated=[entry,...h].slice(0,10); saveCheckHistory(updated); return updated; });
+      clearSession();
+      setStep("result");
+    }
+  };
+  const startNew = () => { clearSession(); setScenario(null); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
+
+  const ll = liveLevel();
+  const liveColors = {neutral:"#8899aa",good:"#34d399",warn:"#fbbf24",risk:"#fb7185"};
+  const liveBg     = {neutral:"rgba(255,255,255,0.04)",good:"rgba(52,211,153,0.08)",warn:"rgba(251,191,36,0.08)",risk:"rgba(251,113,133,0.08)"};
+  const liveBorder = {neutral:"rgba(255,255,255,0.07)",good:"rgba(52,211,153,0.25)",warn:"rgba(251,191,36,0.25)",risk:"rgba(251,113,133,0.25)"};
+  const liveMsgs   = {neutral:"Answer each question to see your risk level update.",good:"Tracking as routine so far.",warn:"Some risk indicators present — finish all questions.",risk:"High-risk signals detected. Review carefully."};
+
+  const s = {
+    wrap:  { fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", background:"linear-gradient(160deg,#020617 0%,#050d1f 50%,#020617 100%)", minHeight:"100vh", color:"#f8fafc", padding:"18px 16px 50px" },
+    card:  { background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"18px 20px", marginBottom:20 },
+    label: { fontSize:"0.7rem", letterSpacing:"0.08em", textTransform:"uppercase", color:"#8899aa", marginBottom:10, display:"block" },
+    grid:  { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, marginBottom:22 },
+    scard: (active) => ({ background:active?"linear-gradient(135deg,rgba(34,193,255,0.12),rgba(110,231,183,0.07))":"rgba(255,255,255,0.04)", border:`1px solid ${active?"rgba(34,193,255,0.6)":"rgba(255,255,255,0.07)"}`, borderRadius:12, padding:"13px 12px", cursor:"pointer", display:"flex", flexDirection:"column", gap:6, transition:"all .15s" }),
+    badge: (level) => ({ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", padding:"2px 7px", borderRadius:5, width:"fit-content", textTransform:"uppercase", background:level==="high"?"rgba(251,113,133,0.15)":"rgba(251,191,36,0.12)", color:level==="high"?"#fb7185":"#fbbf24", border:`1px solid ${level==="high"?"rgba(251,113,133,0.25)":"rgba(251,191,36,0.25)"}` }),
+    btn:   (primary) => ({ padding:primary?"10px 20px":"8px 16px", borderRadius:999, border:primary?"1px solid rgba(34,193,255,0.45)":"1px solid rgba(255,255,255,0.1)", background:primary?"rgba(34,193,255,0.12)":"rgba(255,255,255,0.04)", color:primary?"#22c1ff":"#f8fafc", cursor:"pointer", fontSize:"0.82rem", fontWeight:600, fontFamily:"inherit" }),
+  };
+
+  const copySum = () => {
+    if (!sc) return;
+    const ll2=sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const lines=[`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+    if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
+    lines.push("","General guidance only — not legal advice.");
+    navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  };
+
+  return (
+    <div style={s.wrap}>
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
+
+      <div style={{ maxWidth:840, margin:"0 auto" }}>
+
+        {/* Header */}
+        <div style={{ ...s.card }}>
+          <div className="hdr-row" style={{ display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ width:46, height:46, flexShrink:0, borderRadius:12, background:"linear-gradient(135deg,#22c1ff,#6ee7b7)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:15, color:"#02111a" }}>HR✓</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:"1.25rem", fontWeight:700 }}>People Action Check</div>
+              <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"#8899aa", marginTop:3 }}>A private confidence check for people-management decisions. Completed checks save to this browser — email yourself to keep a permanent record.</div>
+            </div>
+            <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"rgba(34,193,255,0.3)",color:"#22c1ff",background:"rgba(34,193,255,0.07)"}:{}) }}>
+              <span>📁</span>
+              <span>Company Policies{policies.length>0?` (${policies.length})`:""}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Resume banner */}
+        {showResumeBanner && savedSession && (
+          <div style={{ background:"rgba(34,193,255,0.07)", border:"1px solid rgba(34,193,255,0.25)", borderRadius:12, padding:"14px 18px", marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:"0.85rem", fontWeight:700, color:"#22c1ff", marginBottom:3 }}>You have a saved session</div>
+              <div style={{ fontSize:"0.79rem", color:"#8899aa" }}>{META[savedSession.scenario].icon} {savedSession.scenario} — {savedSession.step==="result"?"completed":"in progress"}</div>
+            </div>
+            <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+              <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
+              <button style={s.btn(false)} onClick={dismissResume}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
+        {/* Scenario grid */}
+        <span style={s.label}>Step 1 — select your situation</span>
+        <div style={s.grid}>
+          {Object.keys(META).map(name=>{
+            const mm=META[name];
+            return (
+              <div key={name} style={s.scard(scenario===name)} onClick={()=>pick(name)}>
+                <div style={{ fontSize:"1.3rem" }}>{mm.icon}</div>
+                <div style={{ fontSize:"0.85rem", fontWeight:600, lineHeight:1.25 }}>{name}</div>
+                <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
+              </div>
+            );
+          })}
+        </div>
+
+
+        {/* Session History Box */}
+        {step==="pick" && (
+          <div style={{ marginBottom:18 }}>
+            <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:"1.1rem" }}>🗂️</span>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
+                  <div style={{ fontSize:"0.76rem", color:"#8899aa", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
+                </div>
+              </div>
+              <span style={{ color:"#8899aa", fontSize:"0.85rem", flexShrink:0 }}>{showHistory?"▲":"▼"}</span>
+            </div>
+
+            {showHistory && (
+              <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
+                {checkHistory.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"16px 0", color:"#8899aa", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
+                ) : (
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ fontSize:"0.72rem", color:"#fb7185", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ saveCheckHistory([]); setCheckHistory([]); setViewingPast(null); }}>Clear all</button>
+                    </div>
+                    {viewingPast!==null && checkHistory[viewingPast] ? (()=>{
+              const e=checkHistory[viewingPast];
+              const eqs=QS[e.scenario]; const col=C[e.level];
+              const st2=STEPS[e.scenario][e.level];
+              const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+              return (
+                <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:14, padding:"16px 18px", marginBottom:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{META[e.scenario].icon} {e.scenario}</div>
+                      {e.employeeName && <div style={{ fontSize:"0.8rem", color:"#22c1ff", fontWeight:600, marginTop:2 }}>{e.employeeName}</div>}
+                      <div style={{ fontSize:"0.74rem", color:"#8899aa", marginTop:2 }}>{e.date} at {e.time}</div>
+                    </div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[e.level]}</span>
+                      <button style={s.btn(false)} onClick={()=>setViewingPast(null)}>Close</button>
+                    </div>
+                  </div>
+                  {eqs.map((item,i)=>{ const a=e.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"#34d399":a==="no"?"#fb7185":"#fbbf24";
+                    return (
+                      <div key={i} style={{ borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:9, marginTop:9 }}>
+                        <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"rgba(248,250,252,0.8)", marginBottom:4 }}>{item.q}</div>
+                        <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
+                        {e.notes[i] && <div style={{ fontSize:"0.76rem", color:"#8899aa", marginTop:3, fontStyle:"italic" }}>{e.notes[i]}</div>}
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop:14, borderTop:"1px solid rgba(255,255,255,0.06)", paddingTop:12 }}>
+                    <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"#8899aa", marginBottom:8 }}>Next steps from that check</div>
+                    {st2.map((st,i)=>(
+                      <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"rgba(248,250,252,0.7)", marginBottom:5 }}>
+                        <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })() : (
+              checkHistory.map((e,i)=>{ const col=C[e.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+                return (
+                  <div key={e.id} onClick={()=>setViewingPast(i)} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
+                      <div>
+                        <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[e.scenario].icon} {e.scenario}</div>
+                        <div style={{ fontSize:"0.72rem", color:"#8899aa", marginTop:1 }}>{e.employeeName ? <span style={{ color:"rgba(248,250,252,0.6)", marginRight:6 }}>{e.employeeName} ·</span> : null}{e.date} · {e.time}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 7px", borderRadius:4, background:col.bg, color:col.text, border:`1px solid ${col.border}`, whiteSpace:"nowrap" }}>{labels[e.level]}</span>
+                      <span style={{ fontSize:"0.72rem", color:"#8899aa" }}>View →</span>
+                      <button onClick={ev=>{ ev.stopPropagation(); const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); saveCheckHistory(updated); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#fb7185", fontSize:"0.85rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit" }} title="Delete">×</button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Follow-up reminders banner */}
+        {step==="pick" && followups.filter(f=>!f.dismissed).length>0 && (()=>{
+          const active = followups.filter(f=>!f.dismissed).sort((a,b)=>new Date(a.dueDate+`T00:00:00`)-new Date(b.dueDate+`T00:00:00`));
+          const today = new Date(); today.setHours(0,0,0,0);
+          return (
+            <div style={{ background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.25)", borderRadius:12, padding:"14px 18px", marginBottom:18 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
+                <span style={{ fontSize:"1.1rem" }}>📅</span>
+                <div style={{ fontWeight:700, fontSize:"0.9rem", color:"#fbbf24" }}>Follow-up reminders</div>
+              </div>
+              {active.map(f=>{
+                const dueDate = new Date(f.dueDate+`T00:00:00`);
+                const isOverdue = dueDate < today;
+                return (
+                  <div key={f.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"rgba(255,255,255,0.03)", border:`1px solid ${isOverdue?"rgba(251,113,133,0.2)":"rgba(251,191,36,0.15)"}`, borderRadius:9, padding:"9px 12px", marginBottom:6, flexWrap:"wrap" }}>
+                    <div>
+                      <div style={{ fontSize:"0.84rem", fontWeight:600 }}>{META[f.scenario].icon} {f.scenario}{f.employeeName?` · ${f.employeeName}`:""}</div>
+                      <div style={{ fontSize:"0.73rem", color:isOverdue?"#fb7185":"#fbbf24", marginTop:1 }}>{isOverdue?"Overdue — was due":"Due"} {new Date(f.dueDate+`T00:00:00`).toLocaleDateString()}</div>
+                    </div>
+                    <button style={{ fontSize:"0.71rem", color:"#8899aa", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ const updated=followups.map(fu=>fu.id===f.id?{...fu,dismissed:true}:fu); setFollowups(updated); saveFollowups(updated); }}>Dismiss</button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* Email nudge on pick screen */}
+        {step==="pick" && (
+          <div style={{ background:"rgba(34,193,255,0.05)", border:"1px solid rgba(34,193,255,0.18)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:"1.2rem", flexShrink:0 }}>📧</span>
+            <div style={{ fontSize:"0.83rem", color:"rgba(248,250,252,0.75)", lineHeight:1.5 }}>
+              When you finish your check, you can <strong style={{ color:"#22c1ff" }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
+            </div>
+          </div>
+        )}
+
+        {/* Context panel */}
+        {step!=="pick" && m && (
+          <div style={{ ...s.card, marginBottom:18 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div style={{ fontSize:"1rem", fontWeight:700 }}>{m.icon} {scenario}</div>
+              <div style={s.badge(m.riskLevel)}>{m.riskLabel}</div>
+            </div>
+            <div style={{ fontSize:"0.88rem", color:"rgba(248,250,252,0.78)", lineHeight:1.6, marginBottom:14 }}>{m.description}</div>
+            <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"#8899aa", marginBottom:9 }}>Common examples</div>
+            {m.examples.map((ex,i)=>(
+              <div key={i} style={{ display:"flex", gap:9, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.05)", borderRadius:9, padding:"9px 12px", fontSize:"0.82rem", lineHeight:1.5, color:"rgba(248,250,252,0.7)", marginBottom:6 }}>
+                <span style={{ color:"#8899aa", flexShrink:0 }}>→</span><span>{ex}</span>
+              </div>
+            ))}
+            <div style={{ marginTop:14, marginBottom:4 }}>
+              <button style={{ fontSize:"0.71rem", color:"rgba(34,193,255,0.75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }} onClick={()=>setShowDocTips(v=>!v)}>
+                {showDocTips?"Hide documentation tips":"+ How to document this situation"}
+              </button>
+            </div>
+            {showDocTips && (
+              <div style={{ background:"rgba(34,193,255,0.05)", border:"1px solid rgba(34,193,255,0.15)", borderRadius:9, padding:"12px 14px", marginBottom:10 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"rgba(34,193,255,0.7)", marginBottom:8, fontWeight:700 }}>Documentation guidance</div>
+                {m.docTips.map((tip,i)=>(
+                  <div key={i} style={{ display:"flex", gap:9, fontSize:"0.81rem", lineHeight:1.5, color:"rgba(248,250,252,0.75)", marginBottom:6 }}>
+                    <span style={{ color:"rgba(34,193,255,0.5)", flexShrink:0, fontWeight:700 }}>{i+1}.</span><span>{tip}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.2)", borderRadius:9, padding:"10px 13px", fontSize:"0.82rem", color:"rgba(251,191,36,0.9)", lineHeight:1.5, margin:"10px 0 10px" }}>
+              <strong>Watch for:</strong> {m.watch}
+            </div>
+            <div style={{ background:"rgba(110,231,183,0.06)", border:"1px solid rgba(110,231,183,0.2)", borderRadius:9, padding:"10px 13px", fontSize:"0.82rem", color:"rgba(110,231,183,0.9)", lineHeight:1.5, marginBottom:16 }}>
+              <strong>Not sure? Contact HR:</strong> {m.contactHR}
+            </div>
+            {step==="context" && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:"0.7rem", color:"#8899aa", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:600 }}>Employee name <span style={{ color:"#667788", fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></div>
+                <input type="text" placeholder="e.g. Alex Johnson" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:9, padding:"10px 13px", color:"#f8fafc", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
+                <div style={{ fontSize:"0.73rem", color:"#667788", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
+              </div>
+            )}
+            {step==="context" ? <button style={s.btn(true)} onClick={start}>Start the check</button> : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>}
+          </div>
+        )}
+
+        {/* Questions */}
+        {(step==="questions"||step==="result") && (
+          <div style={{ marginBottom:18 }}>
+            <span style={s.label}>Step 2 — {scenario} check</span>
+            <div style={{ marginBottom:14 }}>
+              <div style={{ height:3, background:"rgba(255,255,255,0.07)", borderRadius:99, marginBottom:5 }}>
+                <div style={{ height:"100%", borderRadius:99, background:"linear-gradient(90deg,#22c1ff,#6ee7b7)", width:`${qs.length?(answered/qs.length)*100:0}%`, transition:"width .3s" }} />
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.74rem", color:"#8899aa" }}>
+                <span>{answered} of {qs.length} answered</span><span>{qs.length?Math.round((answered/qs.length)*100):0}%</span>
+              </div>
+            </div>
+            <PolicyHint policies={policies} scenario={scenario} />
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 13px", borderRadius:9, fontSize:"0.82rem", fontWeight:600, marginBottom:16, border:`1px solid ${liveBorder[ll]}`, background:liveBg[ll], color:liveColors[ll], transition:"all .25s" }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:"currentColor", flexShrink:0 }} />
+              {liveMsgs[ll]}
+            </div>
+            {qs.map((item,idx)=>{
+              const a=answers[idx];
+              const rowBg=a==="yes"?"rgba(52,211,153,0.06)":a==="no"?"rgba(251,113,133,0.06)":a==="unknown"?"rgba(251,191,36,0.05)":"rgba(255,255,255,0.04)";
+              const rowBorder=a==="yes"?"rgba(52,211,153,0.28)":a==="no"?"rgba(251,113,133,0.28)":a==="unknown"?"rgba(251,191,36,0.22)":"rgba(255,255,255,0.07)";
+              return (
+                <div key={idx} style={{ background:rowBg, border:`1px solid ${rowBorder}`, borderRadius:11, padding:"13px 15px", marginBottom:9, transition:"all .2s" }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:"0.68rem", color:"#8899aa", fontWeight:600, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.04em" }}>Question {idx+1} of {qs.length}</div>
+                      <div style={{ fontSize:"0.88rem", lineHeight:1.5, display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
+                        {item.q}
+                        {item.critical && <span style={{ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase", background:"rgba(251,113,133,0.12)", border:"1px solid rgba(251,113,133,0.3)", color:"#fb7185", borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }}>Critical</span>}
+                      </div>
+                      <button style={{ fontSize:"0.71rem", color:"rgba(34,193,255,0.65)", cursor:"pointer", marginTop:5, background:"none", border:"none", fontFamily:"inherit", padding:0 }} onClick={()=>{const h=[...hints];h[idx]=!h[idx];setHints(h);}}>
+                        {hints[idx]?"Hide":"+ Why this matters"}
+                      </button>
+                      {hints[idx] && <div style={{ fontSize:"0.77rem", color:"#8899aa", marginTop:5, lineHeight:1.45 }}>{item.hint}</div>}
+                    </div>
+                    <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                      {[["Yes","yes"],["No","no"],["?","unknown"]].map(([label,val])=>{
+                        const on=a===val;
+                        const onBg=val==="yes"?"rgba(52,211,153,0.2)":val==="no"?"rgba(251,113,133,0.2)":"rgba(251,191,36,0.15)";
+                        const onBorder=val==="yes"?"rgba(52,211,153,0.55)":val==="no"?"rgba(251,113,133,0.55)":"rgba(251,191,36,0.45)";
+                        const onColor=val==="yes"?"#34d399":val==="no"?"#fb7185":"#fbbf24";
+                        return <button key={val} className="ans-btn" title={val==="unknown"?"Don't know":undefined} style={{ padding:"5px 12px", borderRadius:999, border:`1px solid ${on?onBorder:"rgba(255,255,255,0.1)"}`, background:on?onBg:"transparent", color:on?onColor:"#f8fafc", cursor:"pointer", fontWeight:600, fontSize:"0.77rem", minWidth:46, fontFamily:"inherit" }} onClick={()=>ans(idx,val)}>{label}</button>;
+                      })}
+                    </div>
+                  </div>
+                  {a!==null && <textarea rows={2} className="notes-ta" placeholder="Add context or notes (optional)..." style={{ width:"100%", marginTop:9, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:7, padding:"7px 10px", color:"#f8fafc", fontSize:"0.79rem", fontFamily:"inherit", resize:"none", outline:"none" }} value={notes[idx]||""} onChange={e=>{const n=[...notes];n[idx]=e.target.value;setNotes(n);}} />}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Result */}
+        {step==="result" && sc && (()=>{
+          const col=C[sc.level];
+          const st2=STEPS[scenario][sc.level];
+          const titles={good:"Routine management action — proceed carefully.",warn:"Elevated risk — pause and address gaps before acting.",risk:"High risk — do not proceed without HR or legal review."};
+          const summaries={good:"Your answers indicate this situation is within standard management scope. Document each step you take.",warn:"One or more answers reveal gaps in process, documentation, or legal review. Resolve these before taking action.",risk:"Critical risk factors are present. Acting without HR or legal involvement exposes you and the organization significantly."};
+          const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+          const dn=qs.length-sc.yes-sc.no;
+          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+          return (
+            <div>
+              <div style={{ background:"rgba(34,193,255,0.06)", border:"1px solid rgba(34,193,255,0.2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
+                <span style={{ fontSize:"1.1rem", flexShrink:0 }}>📧</span>
+                <div style={{ fontSize:"0.83rem", color:"rgba(248,250,252,0.8)", lineHeight:1.5 }}>When you're done reviewing, <strong style={{ color:"#22c1ff" }}>enter your email at the bottom of this page</strong> to send yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
+              </div>
+              <span style={s.label}>Assessment</span>
+              {sc.crit && <div style={{ background:"rgba(251,113,133,0.08)", border:"1px solid rgba(251,113,133,0.35)", borderRadius:11, padding:"12px 14px", fontSize:"0.84rem", color:"rgba(253,205,211,0.9)", lineHeight:1.55, marginBottom:11 }}><strong>Critical question not confirmed.</strong> One or more questions marked Critical were answered No or Don't Know. These carry significant legal exposure. HR and legal review is required before any action.</div>}
+              {sc.unk>0 && <div style={{ background:"rgba(251,191,36,0.06)", border:"1px solid rgba(251,191,36,0.2)", borderRadius:10, padding:"10px 13px", fontSize:"0.82rem", color:"rgba(253,230,138,0.85)", lineHeight:1.5, marginBottom:11 }}>{sc.unk} question{sc.unk>1?"s were":" was"} answered "Don't know." Uncertainty is a risk signal and has been factored into the score.</div>}
+              <div style={{ background:col.bg, border:`1px solid ${col.border}`, borderRadius:14, padding:"18px 20px", marginBottom:12 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.09em", textTransform:"uppercase", fontWeight:700, color:col.text, marginBottom:4, opacity:0.85 }}>{labels[sc.level]}</div>
+                <div style={{ fontSize:"1rem", fontWeight:700, color:col.light, marginBottom:6 }}>{titles[sc.level]}</div>
+                <div style={{ fontSize:"0.86rem", lineHeight:1.6, opacity:0.84, marginBottom:14 }}>{summaries[sc.level]}</div>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"#8899aa", marginBottom:9 }}>Recommended next steps</div>
+                {st2.map((st,i)=>(
+                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:9, fontSize:"0.84rem", lineHeight:1.5, padding:"8px 11px", background:"rgba(255,255,255,0.04)", borderRadius:8, border:"1px solid rgba(255,255,255,0.06)", marginBottom:6 }}>
+                    <span style={{ fontSize:"0.68rem", fontWeight:700, width:18, height:18, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1, background:`${col.text}22`, color:col.text }}>{i+1}</span>
+                    <span>{st}</span>
+                  </div>
+                ))}
+              </div>
+              {rel.length>0 && (
+                <div style={{ background:"rgba(34,193,255,0.05)", border:"1px solid rgba(34,193,255,0.18)", borderRadius:11, padding:"13px 16px", marginBottom:12 }}>
+                  <div style={{ fontSize:"0.7rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"rgba(34,193,255,0.7)", marginBottom:9, fontWeight:700 }}>Company documents on file for this scenario</div>
+                  {rel.map(doc=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category); return (
+                    <div key={doc.id} style={{ display:"flex", alignItems:"center", gap:10, background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"8px 11px", marginBottom:6 }}>
+                      <span style={{ fontSize:"0.9rem" }}>📄</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:"0.82rem", fontWeight:700 }}>{doc.name}</div>
+                        <div style={{ fontSize:"0.71rem", color:"#8899aa" }}>{cat?.label} · {(doc.chars/1000).toFixed(1)}k chars</div>
+                      </div>
+                      <button style={{ ...s.btn(false), padding:"4px 10px", fontSize:"0.73rem" }} onClick={()=>setShowPolicyLib(true)}>View</button>
+                    </div>
+                  );})}
+                </div>
+              )}
+              <div style={{ background:"rgba(110,231,183,0.06)", border:"1px solid rgba(110,231,183,0.2)", borderRadius:10, padding:"10px 14px", fontSize:"0.82rem", color:"rgba(110,231,183,0.9)", lineHeight:1.55, marginBottom:12 }}>
+                <strong>Still not sure?</strong> {META[scenario].contactHR}
+              </div>
+              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:11, padding:"14px 16px", marginBottom:12 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"#8899aa", marginBottom:10 }}>Answer breakdown</div>
+                {[["Yes",sc.yes,"#34d399"],["No",sc.no,"#fb7185"],["Don't know",dn,"#fbbf24"]].map(([label,count,color])=>(
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:7 }}>
+                    <div style={{ fontSize:"0.78rem", width:90, flexShrink:0, color:"rgba(248,250,252,0.7)" }}>{label}</div>
+                    <div style={{ flex:1, height:5, background:"rgba(255,255,255,0.07)", borderRadius:99, overflow:"hidden" }}>
+                      <div style={{ height:"100%", background:color, borderRadius:99, width:`${qs.length?(count/qs.length)*100:0}%`, transition:"width .4s" }} />
+                    </div>
+                    <div style={{ fontSize:"0.77rem", color:"#8899aa", width:20, textAlign:"right" }}>{count}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button style={s.btn(true)} onClick={start}>Run again</button>
+                <button style={s.btn(false)} onClick={startNew}>New situation</button>
+                <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
+                <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
+              </div>
+              {/* 30-day follow-up */}
+              {(()=>{
+                const due = new Date(); due.setDate(due.getDate()+30);
+                const dueDateISO = `${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,"0")}-${String(due.getDate()).padStart(2,"0")}`;
+                const dueDateDisplay = due.toLocaleDateString();
+                return (
+                  <div style={{ marginTop:12, background:"rgba(251,191,36,0.06)", border:"1px solid rgba(251,191,36,0.22)", borderRadius:14, padding:"18px 18px" }}>
+                    <div style={{ fontSize:"1rem", fontWeight:700, color:"#f8fafc", marginBottom:4 }}>📅 Set a 30-day follow-up</div>
+                    <div style={{ fontSize:"0.83rem", color:"rgba(248,250,252,0.65)", lineHeight:1.55, marginBottom:14 }}>Come back on <strong style={{ color:"#fbbf24" }}>{dueDateDisplay}</strong> to review progress on this situation. A reminder will appear on your home screen.</div>
+                    {followupSaved ? (
+                      <div style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:9, padding:"10px 14px", fontSize:"0.84rem", color:"#34d399", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
+                    ) : (
+                      <button style={{ ...s.btn(false), borderColor:"rgba(251,191,36,0.35)", color:"#fbbf24" }} onClick={()=>{
+                        const entry = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO, dismissed:false };
+                        const updated = [entry, ...followups]; setFollowups(updated); saveFollowups(updated); setFollowupSaved(true);
+                      }}>Save reminder</button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Attach supporting files */}
+              <div style={{ marginTop:12, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"18px 18px" }}>
+                <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Attach supporting files (optional)</div>
+                <div style={{ fontSize:"0.8rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Tip: before attaching, consider combining emails, Slack/Teams messages, and other documentation into one Word document — it'll come through more cleanly. Screenshots and photos are embedded directly into the report below; other file types are attached separately and sent alongside it.</div>
+                <input ref={fileInputRef} type="file" multiple style={{ display:"none" }} onChange={e=>{ if(e.target.files&&e.target.files.length) handleFilesSelected(e.target.files); e.target.value=""; }} />
+                <button style={s.btn(false)} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>+ Attach files</button>
+                {attachments.length>0 && (
+                  <div style={{ marginTop:12 }}>
+                    {attachments.map((f,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8, padding:"7px 11px", marginBottom:6 }}>
+                        <div style={{ fontSize:"0.79rem", color:"rgba(248,250,252,0.8)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name} <span style={{ color:"#8899aa" }}>({Math.round(f.size/1024)} KB)</span></div>
+                        <button onClick={()=>removeAttachment(i)} style={{ background:"none", border:"none", cursor:"pointer", color:"#fb7185", fontSize:"0.9rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit", flexShrink:0 }} title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Combined send card */}
+              <div style={{ marginTop:12, background:"linear-gradient(135deg,rgba(34,193,255,0.07),rgba(110,231,183,0.05))", border:"1px solid rgba(34,193,255,0.3)", borderRadius:14, padding:"20px 18px" }}>
+                {/* Email to self */}
+                <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Email this to yourself</div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to your inbox. Add notes and bring it to HR.</div>
+                {emailStatus==="sent" ? (
+                  <div style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:9, padding:"10px 14px", fontSize:"0.84rem", color:"#34d399", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
+                ) : (
+                  <div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input type="email" className="email-input" placeholder="your@email.com" value={emailAddr} onChange={e=>{ setEmailAddr(e.target.value); setEmailStatus("idle"); }} style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid rgba(34,193,255,0.3)", borderRadius:9, padding:"11px 14px", color:"#f8fafc", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
+                      <button style={{ ...s.btn(true), padding:"11px 20px", opacity:emailStatus==="sending"?0.6:1 }} onClick={sendEmail} disabled={emailStatus==="sending"||!emailAddr.includes("@")}>
+                        {emailStatus==="sending"?"Sending...":"Send to my email"}
+                      </button>
+                    </div>
+                    {emailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"#fb7185", marginTop:6 }}>Something went wrong. Try again or use Copy Summary above.</div>}
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.08)", margin:"16px 0" }} />
+
+                {/* Send to HR */}
+                <div style={{ fontSize:"0.72rem", color:"#22c1ff", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send to HR</div>
+                <div style={{ fontSize:"0.82rem", color:"rgba(248,250,252,0.6)", lineHeight:1.5, marginBottom:12 }}>Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard.</div>
+                {!hrEmail ? (
+                  <div style={{ fontSize:"0.81rem", color:"#8899aa", lineHeight:1.5 }}>HR email not configured yet — an admin can set it in Company Policies → Upload Files.</div>
+                ) : hrEmailStatus==="sent" ? (
+                  <div style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:9, padding:"10px 14px", fontSize:"0.84rem", color:"#34d399", fontWeight:600 }}>✓ Sent to HR</div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:"0.77rem", color:"#8899aa", marginBottom:10 }}>Sending to: <strong style={{ color:"rgba(248,250,252,0.7)" }}>{hrEmail}</strong></div>
+                    <button style={{ ...s.btn(true), opacity:hrEmailStatus==="sending"?0.6:1 }} onClick={sendToHR} disabled={hrEmailStatus==="sending"}>
+                      {hrEmailStatus==="sending"?"Sending...":"Send to HR"}
+                    </button>
+                    {hrEmailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"#fb7185", marginTop:6 }}>Something went wrong. Try again.</div>}
+                  </div>
+                )}
+
+                {/* Divider + Start new */}
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.08)", marginTop:16, paddingTop:16 }}>
+                  <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={startNew}>Start a new check</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* History */}
+        {history.length>0 && (
+          <div style={{ marginTop:24, borderTop:"1px solid rgba(255,255,255,0.07)", paddingTop:18 }}>
+            <span style={s.label}>Session history</span>
+            {history.map((e,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:9, padding:"9px 13px", fontSize:"0.82rem", marginBottom:6 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                  <div style={{ width:7, height:7, borderRadius:"50%", background:C[e.level].text, flexShrink:0 }} />
+                  <div><div style={{ fontWeight:600 }}>{META[e.scenario].icon} {e.scenario}</div><div style={{ fontSize:"0.72rem", color:"#8899aa" }}>{e.time}</div></div>
+                </div>
+                <div style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:4, background:C[e.level].bg, color:C[e.level].text }}>{e.level==="good"?"Low Risk":e.level==="warn"?"Elevated":"High Risk"}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"#8899aa", lineHeight:1.8 }}>
+          General guidance only — not legal advice.<br />
+          Your progress and company policies save automatically to this browser.<br />
+          © 2025 Melissa A. Weiss. All rights reserved.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
 </body>
 </html>
