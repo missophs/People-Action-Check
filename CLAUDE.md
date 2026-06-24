@@ -1,4 +1,4 @@
-# HR Action Check — Project Instructions
+# People Action Check — Project Instructions
 
 ## What This Is
 
@@ -7,8 +7,8 @@ A standalone browser tool that helps managers run a structured risk check before
 ## Live Deployment
 
 - URL: https://hractioncheck.netlify.app (primary — auto-deploys from GitHub)
-- Deploys from: `github.com/missophs/hr-action-check`, branch `webhooks` (GitHub default branch)
-- Auto-publish is on — just `git push origin webhooks` to deploy
+- Deploys from: `github.com/missophs/People-Action-Check`, branch `main` (GitHub default branch)
+- Auto-publish is on — just `git push origin main` to deploy
 - Secondary/backup: https://hr-action-check.vercel.app (Vercel project `melissaw212-1631s-projects/hr-action-check`, not actively used — kept connected for parity, see `DEPLOYMENT-NOTES.md`)
 - See `DEPLOYMENT-NOTES.md` for required Netlify environment variables (`BREVO_API_KEY`, `BREVO_SENDER_EMAIL`) and incident/troubleshooting history
 
@@ -30,7 +30,7 @@ A standalone browser tool that helps managers run a structured risk check before
 
 1. Make changes to `hr-action-check-final-5.26.html`
 2. Copy updated file to `index.html` (`cp hr-action-check-final-5.26.html index.html`)
-3. Commit and `git push origin webhooks` — Netlify auto-deploys
+3. Commit and `git push origin main` — Netlify auto-deploys
 4. Verify: check the `etag` changed on the live URL, and load the page in a real browser (a 200 response doesn't guarantee it actually renders — see `DEPLOYMENT-NOTES.md`)
 
 ## Scenarios Covered

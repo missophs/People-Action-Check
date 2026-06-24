@@ -1,4 +1,4 @@
-# HR Action Check
+# People Action Check
 
 A private, browser-based confidence check for people-management decisions. Helps managers and HR think through risk before taking action on a workplace situation — performance issues, attendance, conflict, policy violations, terminations, accommodations, harassment/discrimination, retaliation concerns, RIFs, and leave of absence.
 
@@ -58,15 +58,15 @@ Check history, saved policies, and settings persist only in the browser's `local
 No build process. Just open `index.html` in a browser — though the "Send to HR" / "Email yourself" buttons won't work locally since they call Netlify Functions that only exist on the deployed site.
 
 ```bash
-git clone https://github.com/missophs/hr-action-check.git
-cd hr-action-check
-git checkout webhooks
+git clone https://github.com/missophs/People-Action-Check.git
+cd "People Action Check"
+git checkout main
 open index.html
 ```
 
 ## Deploying
 
-Push to the `webhooks` branch (GitHub default branch) — Netlify auto-publishes from there. See `DEPLOYMENT-NOTES.md` for environment variable setup (`BREVO_API_KEY`, `BREVO_SENDER_EMAIL`) and troubleshooting history.
+Push to the `main` branch for the People Action Check clone. Netlify deployment instructions for this clone should be updated separately once a dedicated People Action Check site is created. See `DEPLOYMENT-NOTES.md` for environment variable setup (`BREVO_API_KEY`, `BREVO_SENDER_EMAIL`) and troubleshooting history.
 
 ---
 
