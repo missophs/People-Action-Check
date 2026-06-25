@@ -1,0 +1,309 @@
+/* PAC Design Tokens — CSS custom properties
+ *
+ * Mirrors tokens.js. Linked from index.html.
+ * Update tokens.js first, then sync values here.
+ * All PAC custom properties are prefixed --pac-
+ */
+
+:root {
+  /* ── Base surface */
+  --pac-bg:                  #020617;
+  --pac-bg-alt:              #050d1f;
+  --pac-bg-gradient:         linear-gradient(160deg,#020617 0%,#050d1f 50%,#020617 100%);
+
+  /* ── Surface layers */
+  --pac-surface-0:           rgba(255,255,255,0.025);
+  --pac-surface-1:           rgba(255,255,255,0.04);
+  --pac-surface-2:           rgba(255,255,255,0.03);
+
+  /* ── Borders */
+  --pac-border-0:            rgba(255,255,255,0.05);
+  --pac-border-1:            rgba(255,255,255,0.07);
+  --pac-border-2:            rgba(255,255,255,0.08);
+  --pac-border-3:            rgba(255,255,255,0.10);
+
+  /* ── Text */
+  --pac-text:                #f8fafc;
+  --pac-text-70:             rgba(248,250,252,0.70);
+  --pac-text-65:             rgba(248,250,252,0.65);
+  --pac-text-60:             rgba(248,250,252,0.60);
+  --pac-text-muted:          #8899aa;
+  --pac-text-dim:            #667788;
+
+  /* ── Accent */
+  --pac-accent:              #22c1ff;
+  --pac-accent-bg:           rgba(34,193,255,0.12);
+  --pac-accent-border:       rgba(34,193,255,0.45);
+  --pac-accent-border-alt:   rgba(34,193,255,0.30);
+  --pac-accent-surface:      rgba(34,193,255,0.07);
+  --pac-accent-text-70:      rgba(34,193,255,0.70);
+  --pac-accent-gradient:     linear-gradient(90deg,#22c1ff,#6ee7b7);
+  --pac-accent-card-gradient:linear-gradient(135deg,rgba(34,193,255,0.12),rgba(110,231,183,0.07));
+  --pac-accent-panel-gradient:linear-gradient(135deg,rgba(34,193,255,0.07),rgba(110,231,183,0.05));
+
+  /* ── Risk: Low */
+  --pac-good:                #34d399;
+  --pac-good-bg:             rgba(52,211,153,0.10);
+  --pac-good-bg-light:       rgba(52,211,153,0.08);
+  --pac-good-border:         rgba(52,211,153,0.30);
+  --pac-good-light:          #a7f3d0;
+
+  /* ── Risk: Elevated */
+  --pac-warn:                #fbbf24;
+  --pac-warn-bg:             rgba(251,191,36,0.10);
+  --pac-warn-bg-light:       rgba(251,191,36,0.08);
+  --pac-warn-border:         rgba(251,191,36,0.30);
+  --pac-warn-light:          #fde68a;
+
+  /* ── Risk: High */
+  --pac-risk:                #fb7185;
+  --pac-risk-bg:             rgba(251,113,133,0.10);
+  --pac-risk-bg-light:       rgba(251,113,133,0.08);
+  --pac-risk-border:         rgba(251,113,133,0.30);
+  --pac-risk-light:          #fecdd3;
+
+  /* ── Typography */
+  --pac-font:                -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --pac-text-xxs:            0.62rem;
+  --pac-text-xs:             0.68rem;
+  --pac-text-sm:             0.72rem;
+  --pac-text-md:             0.82rem;
+  --pac-text-base:           0.88rem;
+  --pac-text-lg:             1rem;
+  --pac-text-xl:             1.1rem;
+  --pac-text-2xl:            1.2rem;
+  --pac-text-3xl:            1.25rem;
+
+  /* ── Spacing */
+  --pac-space-1:             4px;
+  --pac-space-2:             8px;
+  --pac-space-3:             12px;
+  --pac-space-4:             16px;
+  --pac-space-5:             20px;
+  --pac-space-6:             24px;
+  --pac-space-7:             28px;
+
+  /* ── Border radius */
+  --pac-radius-badge:        4px;
+  --pac-radius-xs:           7px;
+  --pac-radius-sm:           8px;
+  --pac-radius-md:           9px;
+  --pac-radius-lg:           10px;
+  --pac-radius-xl:           11px;
+  --pac-radius-2xl:          12px;
+  --pac-radius-3xl:          14px;
+  --pac-radius-card:         16px;
+  --pac-radius-full:         999px;
+
+  /* ── Shadows */
+  --pac-shadow-card:         0 2px 12px rgba(0,0,0,0.35);
+  --pac-shadow-raised:       0 4px 20px rgba(0,0,0,0.50);
+  --pac-shadow-accent:       0 0 16px rgba(34,193,255,0.12);
+
+  /* ── Transitions */
+  --pac-transition-fast:     all 0.20s;
+  --pac-transition-base:     all 0.25s;
+  --pac-transition-slow:     all 0.30s;
+
+  /* ── Layout */
+  --pac-content-width:       840px;
+  --pac-page-padding:        18px 16px 50px;
+  --pac-card-padding:        18px 20px;
+  --pac-card-padding-mobile: 14px 14px;
+}
+
+/* ─── Base reset ─────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--pac-bg);
+  font-family: var(--pac-font);
+  color: var(--pac-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Focus ──────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--pac-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar              { width: 6px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        {
+  background: rgba(255,255,255,0.12);
+  border-radius: 3px;
+}
+
+/* ─── Animations ─────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%,60% { transform: translateX(-6px); }
+  40%,80% { transform: translateX(6px); }
+}
+
+.fade-in { animation: fadeIn 0.20s ease forwards; }
+.shake   { animation: shake 0.35s ease; }
+
+/* ─── Input / textarea focus ─────────────────────────── */
+textarea:focus   { border-color: rgba(34,193,255,0.35) !important; }
+input:focus      { outline: none; border-color: rgba(34,193,255,0.35) !important; }
+.email-input:focus { border-color: var(--pac-accent) !important; }
+
+/* ─── Interactive states ─────────────────────────────── */
+.ans-btn {
+  transition: var(--pac-transition-fast);
+  /* min touch target — mobile */
+  min-height: 36px;
+}
+.ans-btn:hover { opacity: 0.85; }
+
+button {
+  font-family: var(--pac-font);
+  cursor: pointer;
+}
+
+/* ─── Utility classes for layout overrides ───────────── */
+
+/* Scenario grid — column count overridden at breakpoints */
+.pac-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+/* Question row — question text + answer buttons side by side */
+.pac-question-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Answer button group */
+.pac-ans-group {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* Result action buttons */
+.pac-result-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Email send row */
+.pac-email-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── Responsive — Tablet (≤768px) ──────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --pac-page-padding:        14px 14px 40px;
+    --pac-card-padding:        16px 16px;
+  }
+
+  .pac-scenario-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+/* ─── Responsive — Mobile (≤600px) ──────────────────── */
+@media (max-width: 600px) {
+  :root {
+    --pac-page-padding:        12px 12px 36px;
+    --pac-card-padding:        var(--pac-card-padding-mobile);
+  }
+
+  /* Single-column scenario grid */
+  .pac-scenario-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Header */
+  .hdr-desc { font-size: 0.76rem !important; }
+  .hdr-row  { flex-wrap: wrap; }
+  .hdr-pol  { width: 100%; justify-content: center; margin-top: 6px; }
+
+  /* Question row: stack vertically */
+  .pac-question-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* Answer buttons: fill available width */
+  .pac-ans-group {
+    width: 100%;
+  }
+  .pac-ans-group .ans-btn {
+    flex: 1;
+    min-width: 0;
+    /* Ensure 44px touch target on mobile */
+    min-height: 44px !important;
+    padding: 10px 8px !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* Result actions: full-width stack */
+  .pac-result-actions {
+    flex-direction: column;
+  }
+  .pac-result-actions button {
+    width: 100%;
+    justify-content: center;
+    display: flex !important;
+  }
+
+  /* Email row: stack */
+  .pac-email-row {
+    flex-direction: column;
+  }
+  .pac-email-row input {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .pac-email-row button {
+    width: 100%;
+  }
+
+  /* Prevent iOS zoom on inputs */
+  .notes-ta    { font-size: 16px !important; }
+  .email-input { font-size: 16px !important; }
+
+  /* Resume banner: stack */
+  .pac-resume-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .pac-resume-actions button {
+    width: 100%;
+  }
+}
+
+/* ─── Responsive — Small mobile (≤390px) ────────────── */
+@media (max-width: 390px) {
+  :root {
+    --pac-page-padding: 10px 10px 32px;
+  }
+
+  .pac-scenario-grid {
+    gap: 7px;
+  }
+}

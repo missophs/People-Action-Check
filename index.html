@@ -3,33 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HR Action Check</title>
+  <title>People Action Check</title>
   <meta name="author" content="Melissa A. Weiss">
   <meta name="copyright" content="© 2025 Melissa A. Weiss. All rights reserved.">
-  <meta name="description" content="HR Action Check — a private confidence check for people-management decisions. Developed by Melissa A. Weiss.">
-  <!-- HR Action Check — developed by Melissa A. Weiss, 2025. All rights reserved. Unauthorized reproduction or distribution is prohibited. -->
+  <meta name="description" content="People Action Check — a private confidence check for people-management decisions. Developed by Melissa A. Weiss.">
+  <!-- People Action Check — developed by Melissa A. Weiss, 2025. All rights reserved. Unauthorized reproduction or distribution is prohibited. -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <script src="https://unpkg.com/docx@8.6.0/build/index.umd.js"></script>
+  <link rel="stylesheet" href="src/design-system/tokens.css" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Fallback base — tokens.css is the full source of truth */
     body { background: #020617; }
-    textarea:focus { border-color: rgba(34,193,255,0.35) !important; }
-    input:focus { outline: none; border-color: rgba(34,193,255,0.35) !important; }
-    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
-    .fade-in { animation: fadeIn 0.2s ease forwards; }
-    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
-    .shake { animation: shake 0.35s ease; }
-    @media (max-width: 600px) {
-      .hdr-desc { font-size: 0.76rem !important; }
-      .hdr-row { flex-wrap: wrap; }
-      .hdr-pol { width: 100%; justify-content: center; margin-top: 6px; }
-      .ans-btn { min-height: 44px !important; padding: 10px 14px !important; font-size: 0.85rem !important; }
-      .notes-ta { font-size: 16px !important; }
-      .email-input { font-size: 16px !important; }
-    }
   </style>
 </head>
 <body>
@@ -933,7 +919,7 @@ function App() {
     <div style={s.wrap}>
       {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
 
-      <div style={{ maxWidth:840, margin:"0 auto" }}>
+      <div style={{ maxWidth:840, margin:"0 auto" }} role="main" aria-label="People Action Check">
 
         {/* Header */}
         <div style={{ ...s.card }}>
@@ -957,7 +943,7 @@ function App() {
               <div style={{ fontSize:"0.85rem", fontWeight:700, color:"#22c1ff", marginBottom:3 }}>You have a saved session</div>
               <div style={{ fontSize:"0.79rem", color:"#8899aa" }}>{META[savedSession.scenario].icon} {savedSession.scenario} — {savedSession.step==="result"?"completed":"in progress"}</div>
             </div>
-            <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            <div className="pac-resume-actions" style={{ display:"flex", gap:8, flexShrink:0 }}>
               <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
               <button style={s.btn(false)} onClick={dismissResume}>Dismiss</button>
             </div>
@@ -965,15 +951,17 @@ function App() {
         )}
 
         {/* Scenario grid */}
-        <span style={s.label}>Step 1 — select your situation</span>
-        <div style={s.grid}>
+        <span style={s.label} id="step1-label">Step 1 — select your situation</span>
+        <div className="pac-scenario-grid" style={s.grid} role="list" aria-labelledby="step1-label">
           {Object.keys(META).map(name=>{
             const mm=META[name];
             return (
-              <div key={name} style={s.scard(scenario===name)} onClick={()=>pick(name)}>
-                <div style={{ fontSize:"1.3rem" }}>{mm.icon}</div>
-                <div style={{ fontSize:"0.85rem", fontWeight:600, lineHeight:1.25 }}>{name}</div>
-                <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
+              <div key={name} role="listitem">
+                <div style={s.scard(scenario===name)} onClick={()=>pick(name)} role="button" tabIndex={0} aria-pressed={scenario===name} aria-label={`${mm.icon} ${name} — ${mm.riskLabel}`} onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&pick(name)}>
+                  <div style={{ fontSize:"1.3rem" }} aria-hidden="true">{mm.icon}</div>
+                  <div style={{ fontSize:"0.85rem", fontWeight:600, lineHeight:1.25 }}>{name}</div>
+                  <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
+                </div>
               </div>
             );
           })}
@@ -1155,16 +1143,16 @@ function App() {
           <div style={{ marginBottom:18 }}>
             <span style={s.label}>Step 2 — {scenario} check</span>
             <div style={{ marginBottom:14 }}>
-              <div style={{ height:3, background:"rgba(255,255,255,0.07)", borderRadius:99, marginBottom:5 }}>
+              <div role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={qs.length} aria-label={`${answered} of ${qs.length} questions answered`} style={{ height:3, background:"rgba(255,255,255,0.07)", borderRadius:99, marginBottom:5 }}>
                 <div style={{ height:"100%", borderRadius:99, background:"linear-gradient(90deg,#22c1ff,#6ee7b7)", width:`${qs.length?(answered/qs.length)*100:0}%`, transition:"width .3s" }} />
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.74rem", color:"#8899aa" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.74rem", color:"#8899aa" }} aria-hidden="true">
                 <span>{answered} of {qs.length} answered</span><span>{qs.length?Math.round((answered/qs.length)*100):0}%</span>
               </div>
             </div>
             <PolicyHint policies={policies} scenario={scenario} />
-            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 13px", borderRadius:9, fontSize:"0.82rem", fontWeight:600, marginBottom:16, border:`1px solid ${liveBorder[ll]}`, background:liveBg[ll], color:liveColors[ll], transition:"all .25s" }}>
-              <div style={{ width:7, height:7, borderRadius:"50%", background:"currentColor", flexShrink:0 }} />
+            <div role="status" aria-live="polite" aria-label={`Current risk level: ${liveMsgs[ll]}`} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 13px", borderRadius:9, fontSize:"0.82rem", fontWeight:600, marginBottom:16, border:`1px solid ${liveBorder[ll]}`, background:liveBg[ll], color:liveColors[ll], transition:"all .25s" }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:"currentColor", flexShrink:0 }} aria-hidden="true" />
               {liveMsgs[ll]}
             </div>
             {qs.map((item,idx)=>{
@@ -1173,25 +1161,26 @@ function App() {
               const rowBorder=a==="yes"?"rgba(52,211,153,0.28)":a==="no"?"rgba(251,113,133,0.28)":a==="unknown"?"rgba(251,191,36,0.22)":"rgba(255,255,255,0.07)";
               return (
                 <div key={idx} style={{ background:rowBg, border:`1px solid ${rowBorder}`, borderRadius:11, padding:"13px 15px", marginBottom:9, transition:"all .2s" }}>
-                  <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
-                    <div style={{ flex:1 }}>
+                  <div className="pac-question-row">
+                    <div style={{ flex:1 }} id={`q-label-${idx}`}>
                       <div style={{ fontSize:"0.68rem", color:"#8899aa", fontWeight:600, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.04em" }}>Question {idx+1} of {qs.length}</div>
                       <div style={{ fontSize:"0.88rem", lineHeight:1.5, display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
                         {item.q}
-                        {item.critical && <span style={{ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase", background:"rgba(251,113,133,0.12)", border:"1px solid rgba(251,113,133,0.3)", color:"#fb7185", borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }}>Critical</span>}
+                        {item.critical && <span style={{ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase", background:"rgba(251,113,133,0.12)", border:"1px solid rgba(251,113,133,0.3)", color:"#fb7185", borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }} aria-label="Critical question">Critical</span>}
                       </div>
-                      <button style={{ fontSize:"0.71rem", color:"rgba(34,193,255,0.65)", cursor:"pointer", marginTop:5, background:"none", border:"none", fontFamily:"inherit", padding:0 }} onClick={()=>{const h=[...hints];h[idx]=!h[idx];setHints(h);}}>
+                      <button style={{ fontSize:"0.71rem", color:"rgba(34,193,255,0.65)", cursor:"pointer", marginTop:5, background:"none", border:"none", fontFamily:"inherit", padding:0 }} aria-expanded={!!hints[idx]} onClick={()=>{const h=[...hints];h[idx]=!h[idx];setHints(h);}}>
                         {hints[idx]?"Hide":"+ Why this matters"}
                       </button>
                       {hints[idx] && <div style={{ fontSize:"0.77rem", color:"#8899aa", marginTop:5, lineHeight:1.45 }}>{item.hint}</div>}
                     </div>
-                    <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                    <div className="pac-ans-group" role="group" aria-labelledby={`q-label-${idx}`}>
                       {[["Yes","yes"],["No","no"],["?","unknown"]].map(([label,val])=>{
                         const on=a===val;
                         const onBg=val==="yes"?"rgba(52,211,153,0.2)":val==="no"?"rgba(251,113,133,0.2)":"rgba(251,191,36,0.15)";
                         const onBorder=val==="yes"?"rgba(52,211,153,0.55)":val==="no"?"rgba(251,113,133,0.55)":"rgba(251,191,36,0.45)";
                         const onColor=val==="yes"?"#34d399":val==="no"?"#fb7185":"#fbbf24";
-                        return <button key={val} className="ans-btn" title={val==="unknown"?"Don't know":undefined} style={{ padding:"5px 12px", borderRadius:999, border:`1px solid ${on?onBorder:"rgba(255,255,255,0.1)"}`, background:on?onBg:"transparent", color:on?onColor:"#f8fafc", cursor:"pointer", fontWeight:600, fontSize:"0.77rem", minWidth:46, fontFamily:"inherit" }} onClick={()=>ans(idx,val)}>{label}</button>;
+                        const ariaLabel=val==="yes"?"Yes":val==="no"?"No":"Don't know";
+                        return <button key={val} className="ans-btn" aria-label={ariaLabel} aria-pressed={on} style={{ padding:"5px 12px", borderRadius:999, border:`1px solid ${on?onBorder:"rgba(255,255,255,0.1)"}`, background:on?onBg:"transparent", color:on?onColor:"#f8fafc", cursor:"pointer", fontWeight:600, fontSize:"0.77rem", minWidth:46, fontFamily:"inherit" }} onClick={()=>ans(idx,val)}>{label}</button>;
                       })}
                     </div>
                   </div>
@@ -1203,7 +1192,7 @@ function App() {
         )}
 
         {/* Result */}
-        {step==="result" && sc && (()=>{
+        {step==="result" && sc && (()=>{ // aria-label on the outer div below
           const col=C[sc.level];
           const st2=STEPS[scenario][sc.level];
           const titles={good:"Routine management action — proceed carefully.",warn:"Elevated risk — pause and address gaps before acting.",risk:"High risk — do not proceed without HR or legal review."};
@@ -1212,7 +1201,7 @@ function App() {
           const dn=qs.length-sc.yes-sc.no;
           const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
           return (
-            <div>
+            <div role="region" aria-label="Assessment result">
               <div style={{ background:"rgba(34,193,255,0.06)", border:"1px solid rgba(34,193,255,0.2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
                 <span style={{ fontSize:"1.1rem", flexShrink:0 }}>📧</span>
                 <div style={{ fontSize:"0.83rem", color:"rgba(248,250,252,0.8)", lineHeight:1.5 }}>When you're done reviewing, <strong style={{ color:"#22c1ff" }}>enter your email at the bottom of this page</strong> to send yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
@@ -1262,7 +1251,7 @@ function App() {
                   </div>
                 ))}
               </div>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <div className="pac-result-actions">
                 <button style={s.btn(true)} onClick={start}>Run again</button>
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
@@ -1316,9 +1305,9 @@ function App() {
                   <div style={{ background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:9, padding:"10px 14px", fontSize:"0.84rem", color:"#34d399", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
                 ) : (
                   <div>
-                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <input type="email" className="email-input" placeholder="your@email.com" value={emailAddr} onChange={e=>{ setEmailAddr(e.target.value); setEmailStatus("idle"); }} style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid rgba(34,193,255,0.3)", borderRadius:9, padding:"11px 14px", color:"#f8fafc", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
-                      <button style={{ ...s.btn(true), padding:"11px 20px", opacity:emailStatus==="sending"?0.6:1 }} onClick={sendEmail} disabled={emailStatus==="sending"||!emailAddr.includes("@")}>
+                    <div className="pac-email-row">
+                      <input type="email" className="email-input" placeholder="your@email.com" value={emailAddr} onChange={e=>{ setEmailAddr(e.target.value); setEmailStatus("idle"); }} aria-label="Your email address" style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid rgba(34,193,255,0.3)", borderRadius:9, padding:"11px 14px", color:"#f8fafc", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
+                      <button style={{ ...s.btn(true), padding:"11px 20px", opacity:emailStatus==="sending"?0.6:1 }} onClick={sendEmail} disabled={emailStatus==="sending"||!emailAddr.includes("@")} aria-disabled={emailStatus==="sending"||!emailAddr.includes("@")}>
                         {emailStatus==="sending"?"Sending...":"Send to my email"}
                       </button>
                     </div>
