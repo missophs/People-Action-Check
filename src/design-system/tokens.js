@@ -32,10 +32,18 @@ export const COLOR = {
   accentBg:         'rgba(34,193,255,0.12)',
   accentBorder:     'rgba(34,193,255,0.45)',
   accentBorderAlt:  'rgba(34,193,255,0.30)',
+  accentBorder2:    'rgba(34,193,255,0.20)',
+  accentBorder3:    'rgba(34,193,255,0.25)',
+  accentBorder4:    'rgba(34,193,255,0.18)',
   accentSurface:    'rgba(34,193,255,0.07)',
   accentSurfaceAlt: 'rgba(34,193,255,0.05)',
+  accentSurface2:   'rgba(34,193,255,0.06)',
+  accentTabBg:      'rgba(34,193,255,0.15)',
+  accentText55:     'rgba(34,193,255,0.55)',
+  accentText65:     'rgba(34,193,255,0.65)',
   accentText70:     'rgba(34,193,255,0.70)',
   accentText75:     'rgba(34,193,255,0.75)',
+  accentText85:     'rgba(34,193,255,0.85)',
 
   // ── Accent gradients
   accentGradient:       'linear-gradient(90deg,#22c1ff,#6ee7b7)',
@@ -61,6 +69,7 @@ export const COLOR = {
   warnBgLight:      'rgba(251,191,36,0.08)',
   warnBgAlt:        'rgba(251,191,36,0.06)',
   warnBgStrong:     'rgba(251,191,36,0.15)',
+  warnSurface:      'rgba(251,191,36,0.07)',
   warnBorder:       'rgba(251,191,36,0.30)',
   warnBorderStrong: 'rgba(251,191,36,0.45)',
   warnBorderAlt:    'rgba(251,191,36,0.25)',
@@ -82,6 +91,9 @@ export const COLOR = {
   riskBorderMed:    'rgba(251,113,133,0.35)',
   riskLight:        '#fecdd3',
   riskText90:       'rgba(253,205,211,0.90)',
+
+  // ── Overlay
+  overlay:          'rgba(2,6,23,0.88)',
 };
 
 export const FONT = {

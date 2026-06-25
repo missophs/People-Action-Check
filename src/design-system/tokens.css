@@ -30,13 +30,26 @@
   --pac-text-muted:          #8899aa;
   --pac-text-dim:            #667788;
 
+  /* ── Overlay */
+  --pac-overlay:             rgba(2,6,23,0.88);
+
   /* ── Accent */
   --pac-accent:              #22c1ff;
   --pac-accent-bg:           rgba(34,193,255,0.12);
   --pac-accent-border:       rgba(34,193,255,0.45);
   --pac-accent-border-alt:   rgba(34,193,255,0.30);
+  --pac-accent-border-2:     rgba(34,193,255,0.20);
+  --pac-accent-border-3:     rgba(34,193,255,0.25);
+  --pac-accent-border-4:     rgba(34,193,255,0.18);
   --pac-accent-surface:      rgba(34,193,255,0.07);
+  --pac-accent-surface-alt:  rgba(34,193,255,0.05);
+  --pac-accent-surface-2:    rgba(34,193,255,0.06);
+  --pac-accent-tab-bg:       rgba(34,193,255,0.15);
+  --pac-accent-text-55:      rgba(34,193,255,0.55);
+  --pac-accent-text-65:      rgba(34,193,255,0.65);
   --pac-accent-text-70:      rgba(34,193,255,0.70);
+  --pac-accent-text-75:      rgba(34,193,255,0.75);
+  --pac-accent-text-85:      rgba(34,193,255,0.85);
   --pac-accent-gradient:     linear-gradient(90deg,#22c1ff,#6ee7b7);
   --pac-accent-card-gradient:linear-gradient(135deg,rgba(34,193,255,0.12),rgba(110,231,183,0.07));
   --pac-accent-panel-gradient:linear-gradient(135deg,rgba(34,193,255,0.07),rgba(110,231,183,0.05));
@@ -45,22 +58,42 @@
   --pac-good:                #34d399;
   --pac-good-bg:             rgba(52,211,153,0.10);
   --pac-good-bg-light:       rgba(52,211,153,0.08);
+  --pac-good-bg-alt:         rgba(52,211,153,0.06);
+  --pac-good-bg-strong:      rgba(52,211,153,0.20);
   --pac-good-border:         rgba(52,211,153,0.30);
+  --pac-good-border-alt:     rgba(52,211,153,0.25);
+  --pac-good-border-deep:    rgba(52,211,153,0.28);
+  --pac-good-border-strong:  rgba(52,211,153,0.55);
   --pac-good-light:          #a7f3d0;
 
   /* ── Risk: Elevated */
   --pac-warn:                #fbbf24;
   --pac-warn-bg:             rgba(251,191,36,0.10);
   --pac-warn-bg-light:       rgba(251,191,36,0.08);
+  --pac-warn-bg-alt:         rgba(251,191,36,0.06);
+  --pac-warn-bg-strong:      rgba(251,191,36,0.15);
+  --pac-warn-surface:        rgba(251,191,36,0.07);
   --pac-warn-border:         rgba(251,191,36,0.30);
+  --pac-warn-border-alt:     rgba(251,191,36,0.25);
+  --pac-warn-border-deep:    rgba(251,191,36,0.22);
+  --pac-warn-border-strong:  rgba(251,191,36,0.45);
   --pac-warn-light:          #fde68a;
+  --pac-warn-text-90:        rgba(251,191,36,0.90);
+  --pac-warn-text-85:        rgba(253,230,138,0.85);
 
   /* ── Risk: High */
   --pac-risk:                #fb7185;
   --pac-risk-bg:             rgba(251,113,133,0.10);
   --pac-risk-bg-light:       rgba(251,113,133,0.08);
+  --pac-risk-bg-alt:         rgba(251,113,133,0.06);
+  --pac-risk-bg-strong:      rgba(251,113,133,0.20);
   --pac-risk-border:         rgba(251,113,133,0.30);
+  --pac-risk-border-alt:     rgba(251,113,133,0.25);
+  --pac-risk-border-deep:    rgba(251,113,133,0.28);
+  --pac-risk-border-med:     rgba(251,113,133,0.35);
+  --pac-risk-border-strong:  rgba(251,113,133,0.55);
   --pac-risk-light:          #fecdd3;
+  --pac-risk-text-90:        rgba(253,205,211,0.90);
 
   /* ── Typography */
   --pac-font:                -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;

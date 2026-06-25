@@ -1,0 +1,1223 @@
+// PAC Web Application — JSX entry point.
+// Loaded by index.html via <script type="text/babel" src="src/web/App.jsx">.
+// Requires app-data.js and app-utils.js to have loaded first (global scope).
+// All inline style values use CSS custom properties from tokens.css.
+
+const { useState, useEffect, useRef, useCallback } = React;
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
+
+// ── PIN Gate ──────────────────────────────────────────────────────────────
+function PinGate({ onUnlock, mode }) {
+  const [pin, setPin]            = useState("");
+  const [newPin, setNewPin]      = useState("");
+  const [confirmPin, setConfirm] = useState("");
+  const [error, setError]        = useState("");
+  const [shakeKey, setShakeKey]  = useState(0);
+  const [changing, setChanging]  = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current && inputRef.current.focus(); }, [changing]);
+
+  const triggerShake = () => { setShakeKey(k=>k+1); };
+
+  const handleUnlock = async () => {
+    const hash = await sha256(pin);
+    const stored = loadPinHash();
+    if (hash === stored) {
+      if (stored === DEFAULT_PIN_HASH) {
+        setError("Default PIN must be changed before first use.");
+        setChanging(true); setPin("");
+      } else { onUnlock(); }
+    } else { setError("Incorrect PIN."); setPin(""); triggerShake(); }
+  };
+
+  const handleChange = async () => {
+    if (newPin.length < 4) { setError("PIN must be at least 4 characters."); return; }
+    if (newPin !== confirmPin) { setError("PINs do not match."); triggerShake(); return; }
+    const currentHash = await sha256(pin);
+    const stored = loadPinHash();
+    if (currentHash !== stored) { setError("Current PIN is incorrect."); setPin(""); triggerShake(); return; }
+    const newHash = await sha256(newPin);
+    savePinHash(newHash);
+    onUnlock();
+  };
+
+  const s = {
+    wrap:     { padding:"24px 22px", textAlign:"center" },
+    lockIcon: { fontSize:"2rem", marginBottom:12 },
+    title:    { fontSize:"0.9rem", fontWeight:700, color:"var(--pac-text)", marginBottom:6 },
+    sub:      { fontSize:"0.78rem", color:"var(--pac-text-muted)", lineHeight:1.5, marginBottom:18 },
+    input:    { width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", color:"var(--pac-text)", fontSize:"0.9rem", fontFamily:"inherit", outline:"none", textAlign:"center", letterSpacing:"0.2em", marginBottom:10 },
+    btn:      (primary) => ({ width:"100%", padding:"10px", borderRadius:"var(--pac-radius-full)", border:primary?"1px solid var(--pac-accent-border)":"1px solid var(--pac-border-3)", background:primary?"var(--pac-accent-bg)":"var(--pac-surface-1)", color:primary?"var(--pac-accent)":"var(--pac-text)", cursor:"pointer", fontSize:"0.82rem", fontWeight:600, fontFamily:"inherit", marginBottom:8 }),
+    err:      { fontSize:"0.77rem", color:"var(--pac-risk)", marginBottom:10, minHeight:18 },
+    link:     { fontSize:"0.72rem", color:"var(--pac-accent-text-55)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, marginTop:4 },
+  };
+
+  if (!changing) return (
+    <div style={s.wrap}>
+      <div style={s.lockIcon}>🔒</div>
+      <div style={s.title}>HR Access Only</div>
+      <div style={s.sub}>Enter your admin PIN to manage company policies. You will be required to set a new PIN if you haven't already.</div>
+      <div key={shakeKey} className={shakeKey ? "shake" : ""}>
+        <input ref={inputRef} style={s.input} type="password" placeholder="Enter PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleUnlock()} maxLength={20} />
+      </div>
+      <div style={s.err}>{error}</div>
+      <button style={s.btn(true)} onClick={handleUnlock}>Unlock</button>
+      <button style={s.link} onClick={()=>{ setChanging(true); setError(""); setPin(""); }}>Change PIN</button>
+    </div>
+  );
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.lockIcon}>🔑</div>
+      <div style={s.title}>Change HR PIN</div>
+      <div style={s.sub}>Enter your current PIN, then set a new one.</div>
+      <input style={s.input} type="password" placeholder="Current PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} maxLength={20} />
+      <input style={s.input} type="password" placeholder="New PIN (min 4 characters)" value={newPin} onChange={e=>{ setNewPin(e.target.value); setError(""); }} maxLength={20} />
+      <div key={shakeKey} className={shakeKey ? "shake" : ""}>
+        <input style={s.input} type="password" placeholder="Confirm new PIN" value={confirmPin} onChange={e=>{ setConfirm(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleChange()} maxLength={20} />
+      </div>
+      <div style={s.err}>{error}</div>
+      <button style={s.btn(true)} onClick={handleChange}>Save new PIN</button>
+      <button style={s.link} onClick={()=>{ setChanging(false); setError(""); }}>Back</button>
+    </div>
+  );
+}
+
+// ── Policy Library Modal ──────────────────────────────────────────────────
+function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook }) {
+  const [tab, setTab]                     = useState("view");
+  const [unlocked, setUnlocked]           = useState(false);
+  const [pasteText, setPasteText]         = useState("");
+  const [pasteName, setPasteName]         = useState("");
+  const [pasteCategory, setPasteCat]      = useState("handbook");
+  const [dragActive, setDragActive]       = useState(false);
+  const [viewDoc, setViewDoc]             = useState(null);
+  const [editingId, setEditingId]         = useState(null);
+  const [showReset, setShowReset]         = useState(false);
+  const [hrEmailInput, setHrEmailInput]   = useState(hrEmail||"");
+  const [hrEmailSaved, setHrEmailSaved]   = useState(false);
+  const [hrEmailSaving, setHrEmailSaving] = useState(false);
+  const [hrEmailError, setHrEmailError]   = useState(false);
+  useEffect(() => { setHrEmailInput(hrEmail||""); }, [hrEmail]);
+  const [slackInput, setSlackInput]       = useState(slackWebhook||"");
+  const [slackSaved, setSlackSaved]       = useState(false);
+  const [teamsInput, setTeamsInput]       = useState(teamsWebhook||"");
+  const [teamsSaved, setTeamsSaved]       = useState(false);
+  const [hrSubmissions, setHrSubmissions] = useState(()=>loadHrSubmissions());
+  const [viewingSub, setViewingSub]       = useState(null);
+  const fileRef = useRef(null);
+
+  const readFile = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
+      reader.onload = (e) => {
+        const matches = (e.target.result || "").match(/[^\x00-\x1F\x7F-\xFF]{4,}/g) || [];
+        const extracted = matches.filter(s=>s.trim().length>3).join(" ").substring(0,50000);
+        resolve({ name:file.name, text:extracted||"[PDF uploaded. Text extraction is limited — for best results, use Paste Text instead.]", size:file.size });
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
+      reader.readAsText(file);
+    }
+  });
+
+  const handleFiles = async (files) => {
+    const results = [];
+    for (const file of Array.from(files)) {
+      if (file.size > 5*1024*1024) { alert(`${file.name} is over 5MB. Please paste the text directly.`); continue; }
+      const { name, text } = await readFile(file);
+      const lower = (name+" "+text.substring(0,500)).toLowerCase();
+      let autoCategory = "other";
+      if (lower.match(/attendance|absent|tardiness|late|leave policy/)) autoCategory = "attendance";
+      else if (lower.match(/performance|pip|improvement|coaching|discipline/)) autoCategory = "performance";
+      else if (lower.match(/handbook|code of conduct|workplace policy/)) autoCategory = "handbook";
+      else if (lower.match(/accommodat|ada|disability|reasonable/)) autoCategory = "accommodation";
+      else if (lower.match(/termination|separation|severance|rif|layoff/)) autoCategory = "separation";
+      else if (lower.match(/harassment|discrimination|eeoc|complaint/)) autoCategory = "conduct";
+      results.push({ id:Date.now()+Math.random(), name, text, category:autoCategory, addedAt:new Date().toLocaleDateString(), chars:text.length });
+    }
+    if (results.length) { const u=[...policies,...results]; setPolicies(u); savePolicies(u); setTab("view"); }
+  };
+
+  const addPaste = () => {
+    if (!pasteText.trim()) return;
+    const doc = { id:Date.now(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
+    const u=[...policies,doc]; setPolicies(u); savePolicies(u); setPasteText(""); setPasteName(""); setTab("view");
+  };
+
+  const removeDoc = (id) => {
+    const u=policies.filter(p=>p.id!==id); setPolicies(u); savePolicies(u);
+    if (viewDoc&&viewDoc.id===id) setViewDoc(null);
+  };
+
+  const updateCategory = (id, cat) => { const u=policies.map(p=>p.id===id?{...p,category:cat}:p); setPolicies(u); savePolicies(u); };
+
+  const handleReset = () => {
+    if (!window.confirm("This will delete all stored policies and reset the PIN to 1234. This cannot be undone.")) return;
+    savePolicies([]); setPolicies([]); savePinHash(DEFAULT_PIN_HASH);
+    setShowReset(false); setUnlocked(false); setTab("view");
+  };
+
+  const relevantDocs = currentScenario
+    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(currentScenario)||cat.id==="handbook"||cat.id==="other"); })
+    : policies;
+
+  const s = {
+    overlay: { position:"fixed", inset:0, background:"var(--pac-overlay)", zIndex:1000, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"20px 16px", overflowY:"auto" },
+    modal:   { width:"100%", maxWidth:680, background:"linear-gradient(160deg,#0a1628,#060f1e)", border:"1px solid var(--pac-border-3)", borderRadius:18, overflow:"hidden", marginTop:8 },
+    header:  { padding:"18px 22px", borderBottom:"1px solid var(--pac-border-1)", display:"flex", alignItems:"center", justifyContent:"space-between" },
+    tab:     (active) => ({ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"none", cursor:"pointer", fontSize:"0.78rem", fontWeight:600, fontFamily:"inherit", background:active?"var(--pac-accent-tab-bg)":"transparent", color:active?"var(--pac-accent)":"var(--pac-text-muted)", transition:"all .15s", position:"relative" }),
+    btn:     (primary) => ({ padding:primary?"9px 18px":"7px 14px", borderRadius:"var(--pac-radius-full)", border:primary?"1px solid var(--pac-accent-border)":"1px solid var(--pac-border-3)", background:primary?"var(--pac-accent-bg)":"var(--pac-surface-1)", color:primary?"var(--pac-accent)":"var(--pac-text)", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, fontFamily:"inherit" }),
+    input:   { width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-sm)", padding:"9px 12px", color:"var(--pac-text)", fontSize:"0.83rem", fontFamily:"inherit", outline:"none" },
+    select:  { background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-sm)", padding:"7px 10px", color:"var(--pac-text)", fontSize:"0.8rem", fontFamily:"inherit", outline:"none", cursor:"pointer" },
+  };
+
+  const lockBadge = (
+    <span style={{ fontSize:"0.6rem", verticalAlign:"middle", marginLeft:5, padding:"1px 5px", borderRadius:"var(--pac-radius-badge)", background:"var(--pac-risk-bg)", color:"var(--pac-risk)", border:"1px solid var(--pac-risk-border-alt)", fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase" }}>HR</span>
+  );
+
+  return (
+    <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={s.modal} className="fade-in">
+        {/* Header */}
+        <div style={s.header}>
+          <div>
+            <div style={{ fontSize:"1rem", fontWeight:700 }}>Company Policies</div>
+            <div style={{ fontSize:"0.78rem", color:"var(--pac-text-muted)", marginTop:2 }}>
+              {policies.length===0 ? "No documents on file" : `${policies.length} document${policies.length!==1?"s":""} stored in this browser`}
+            </div>
+          </div>
+          <button onClick={onClose} style={s.btn(false)}>Close</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:"flex", gap:4, padding:"12px 22px 0", borderBottom:"1px solid var(--pac-border-1)", flexWrap:"wrap" }}>
+          <button style={s.tab(tab==="view")} onClick={()=>{ setTab("view"); setViewDoc(null); }}>
+            View Policies {policies.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{policies.length}</span>}
+          </button>
+          <button style={s.tab(tab==="upload")} onClick={()=>setTab("upload")}>
+            Upload Files {lockBadge}
+          </button>
+          <button style={s.tab(tab==="paste")} onClick={()=>setTab("paste")}>
+            Paste Text {lockBadge}
+          </button>
+          <button style={s.tab(tab==="dashboard")} onClick={()=>{ setTab("dashboard"); setViewingSub(null); }}>
+            HR Dashboard {lockBadge}{hrSubmissions.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{hrSubmissions.length}</span>}
+          </button>
+        </div>
+
+        <div style={{ padding:"20px 22px" }}>
+
+          {/* VIEW TAB */}
+          {tab==="view" && (
+            <div>
+              {policies.length===0 ? (
+                <div style={{ textAlign:"center", padding:"32px 0", color:"var(--pac-text-muted)" }}>
+                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📁</div>
+                  <div style={{ fontSize:"0.88rem" }}>No policies on file yet.</div>
+                  <div style={{ fontSize:"0.79rem", marginTop:6, color:"var(--pac-text-dim)" }}>HR can add documents using the Upload or Paste tabs.</div>
+                </div>
+              ) : viewDoc ? (
+                <div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                    <button style={s.btn(false)} onClick={()=>setViewDoc(null)}>Back</button>
+                    <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{viewDoc.name}</div>
+                  </div>
+                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                    {viewDoc.text}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {currentScenario && relevantDocs.length>0 && relevantDocs.length<policies.length && (
+                    <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.79rem", color:"var(--pac-good)", marginBottom:14 }}>
+                      {relevantDocs.length} of {policies.length} documents are relevant to the current scenario.
+                    </div>
+                  )}
+                  {policies.map(doc=>{
+                    const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category);
+                    const isRelevant=currentScenario&&relevantDocs.find(d=>d.id===doc.id);
+                    return (
+                      <div key={doc.id} style={{ background:isRelevant?"var(--pac-accent-surface-alt)":"var(--pac-surface-2)", border:`1px solid ${isRelevant?"var(--pac-accent-border-2)":"var(--pac-border-1)"}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"flex-start", gap:12 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                            <span style={{ fontWeight:700, fontSize:"0.85rem" }}>{doc.name}</span>
+                            {isRelevant && <span style={{ fontSize:"0.62rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", background:"var(--pac-accent-bg)", border:"1px solid var(--pac-accent-border-3)", color:"var(--pac-accent)", borderRadius:"var(--pac-radius-badge)", padding:"1px 6px" }}>Relevant</span>}
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                            {unlocked && editingId===doc.id ? (
+                              <select style={{ ...s.select, fontSize:"0.73rem", padding:"3px 8px" }} value={doc.category} onChange={e=>{ updateCategory(doc.id,e.target.value); setEditingId(null); }}>
+                                {POLICY_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                              </select>
+                            ) : (
+                              <span onClick={()=>unlocked&&setEditingId(doc.id)} style={{ fontSize:"0.69rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:5, cursor:unlocked?"pointer":"default", background:`${cat?.color}18`, color:cat?.color, border:`1px solid ${cat?.color}30` }}>{cat?.label}</span>
+                            )}
+                            <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>{(doc.chars/1000).toFixed(1)}k chars · {doc.addedAt}</span>
+                          </div>
+                          <div style={{ fontSize:"0.76rem", color:"var(--pac-text-60)", marginTop:5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                            {doc.text.substring(0,120).replace(/\s+/g," ")}...
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                          <button style={s.btn(false)} onClick={()=>setViewDoc(doc)}>View</button>
+                          {unlocked && <button style={{ ...s.btn(false), color:"var(--pac-risk)", borderColor:"var(--pac-risk-bg-alt)" }} onClick={()=>removeDoc(doc.id)}>Remove</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* UPLOAD TAB — PIN gated */}
+          {tab==="upload" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-65)", lineHeight:1.6, marginBottom:14 }}>
+                  Upload policy documents, handbook sections, or any HR reference material. Supported: .txt, .pdf, .doc, .docx, .md up to 5MB. Files stay in this browser only.
+                </div>
+                <div
+                  style={{ border:`2px dashed ${dragActive?"rgba(34,193,255,0.6)":"rgba(255,255,255,0.12)"}`, background:dragActive?"var(--pac-accent-surface-2)":"var(--pac-surface-2)", borderRadius:12, padding:"32px 24px", textAlign:"center", cursor:"pointer", transition:"all .15s", marginBottom:14 }}
+                  onClick={()=>fileRef.current.click()}
+                  onDragOver={e=>{e.preventDefault();setDragActive(true);}}
+                  onDragLeave={()=>setDragActive(false)}
+                  onDrop={e=>{e.preventDefault();setDragActive(false);handleFiles(e.dataTransfer.files);}}
+                >
+                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📂</div>
+                  <div style={{ fontSize:"0.88rem", fontWeight:600, color:"var(--pac-text)", marginBottom:4 }}>Drop files here or click to browse</div>
+                  <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)" }}>.txt, .pdf, .doc, .docx, .md — up to 5MB each</div>
+                  <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
+                </div>
+                <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.78rem", color:"var(--pac-accent-text-85)", lineHeight:1.5, marginBottom:16 }}>
+                  PDF tip: Text extraction from PDFs is limited. For better results, copy the text and use the Paste Text tab.
+                </div>
+                {/* Change PIN + Reset */}
+                <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>{ setUnlocked(false); }}>Change PIN</button>
+                  {!showReset
+                    ? <button style={{ ...s.btn(false), fontSize:"0.74rem", color:"var(--pac-risk)", borderColor:"var(--pac-risk-bg-alt)" }} onClick={()=>setShowReset(true)}>Reset all policies + PIN</button>
+                    : <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <span style={{ fontSize:"0.76rem", color:"var(--pac-risk)" }}>This deletes everything.</span>
+                        <button style={{ ...s.btn(false), fontSize:"0.74rem", color:"var(--pac-risk)", borderColor:"var(--pac-risk-border-deep)" }} onClick={handleReset}>Confirm reset</button>
+                        <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setShowReset(false)}>Cancel</button>
+                      </div>
+                  }
+                </div>
+                {/* HR Settings */}
+                <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, marginTop:6 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>HR Email Address</div>
+                  <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:8 }}>Employees can send check results directly to this address using the "Send to HR" button on result screens.</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); setHrEmailError(false); }} />
+                    <button style={{ ...s.btn(true), opacity:hrEmailSaving?0.6:1 }} disabled={hrEmailSaving} onClick={async()=>{
+                      setHrEmailSaving(true); setHrEmailError(false);
+                      try { await onSaveHrEmail(hrEmailInput.trim()); setHrEmailSaved(true); }
+                      catch(e) { setHrEmailError(true); }
+                      setHrEmailSaving(false);
+                    }}>{hrEmailSaving?"Saving...":"Save"}</button>
+                  </div>
+                  {hrEmailSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:6 }}>Saved — applies to every device.</div>}
+                  {hrEmailError && <div style={{ fontSize:"0.77rem", color:"var(--pac-risk)", marginTop:6 }}>Couldn't save. Check your connection and try again.</div>}
+                </div>
+                {/* Notifications */}
+                <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, marginTop:6 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>Channel Notifications</div>
+                  <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:12 }}>When a check is sent to HR, a notification card is posted to the configured channels. Paste the incoming webhook URL from Slack or Teams.</div>
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:"0.69rem", color:"var(--pac-text-muted)", marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ background:"rgba(74,144,226,0.15)", border:"1px solid rgba(74,144,226,0.3)", color:"#4a90e2", borderRadius:"var(--pac-radius-badge)", padding:"1px 6px", fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>Slack</span>
+                      Incoming Webhook URL
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); }} />
+                      <button style={s.btn(true)} onClick={()=>{ onSaveSlackWebhook(slackInput.trim()); setSlackSaved(true); }}>Save</button>
+                    </div>
+                    {slackSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:"0.69rem", color:"var(--pac-text-muted)", marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ background:"rgba(98,100,167,0.15)", border:"1px solid rgba(98,100,167,0.3)", color:"#9b9de8", borderRadius:"var(--pac-radius-badge)", padding:"1px 6px", fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>Teams</span>
+                      Incoming Webhook URL
+                    </div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); }} />
+                      <button style={s.btn(true)} onClick={()=>{ onSaveTeamsWebhook(teamsInput.trim()); setTeamsSaved(true); }}>Save</button>
+                    </div>
+                    {teamsSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
+                  </div>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* PASTE TAB — PIN gated */}
+          {tab==="paste" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-65)", lineHeight:1.6, marginBottom:14 }}>
+                  Paste policy text directly. Useful for PDFs, copied handbook sections, or any text-based reference material.
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Document name</div>
+                  <input style={s.input} placeholder="e.g. Attendance Policy, Handbook Section 4..." value={pasteName} onChange={e=>setPasteName(e.target.value)} />
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Category</div>
+                  <select style={s.select} value={pasteCategory} onChange={e=>setPasteCat(e.target.value)}>
+                    {POLICY_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Policy text</div>
+                  <textarea rows={10} style={{ ...s.input, resize:"vertical" }} placeholder="Paste your policy text here..." value={pasteText} onChange={e=>setPasteText(e.target.value)} />
+                </div>
+                <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:16 }}>
+                  <button style={s.btn(true)} onClick={addPaste} disabled={!pasteText.trim()}>Save to library</button>
+                  <span style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)" }}>{pasteText.length.toLocaleString()} characters</span>
+                </div>
+                <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, display:"flex", gap:8 }}>
+                  <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setUnlocked(false)}>Change PIN</button>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* HR DASHBOARD TAB — PIN gated */}
+          {tab==="dashboard" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                {hrSubmissions.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"32px 0", color:"var(--pac-text-muted)" }}>
+                    <div style={{ fontSize:"2rem", marginBottom:8 }}>📬</div>
+                    <div style={{ fontSize:"0.88rem" }}>No checks submitted to HR yet.</div>
+                    <div style={{ fontSize:"0.79rem", marginTop:6, color:"var(--pac-text-dim)" }}>When someone uses "Send to HR" on their results screen, the check will appear here.</div>
+                  </div>
+                ) : viewingSub ? (()=>{
+                  const sub = viewingSub;
+                  const col = C[sub.level];
+                  const eqs = QS[sub.scenario];
+                  const labels = {good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+                  const statusColors = {pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"};
+                  const statusLabels = {pending:"Pending Review",reviewing:"In Review",resolved:"Resolved"};
+                  const updateSub = (patch) => {
+                    const patched = {...sub,...patch};
+                    const updated = hrSubmissions.map(s=>s.id===sub.id?patched:s);
+                    setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(patched);
+                  };
+                  return (
+                    <div>
+                      <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+                        <button style={{ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-border-3)", background:"var(--pac-surface-1)", color:"var(--pac-text)", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>setViewingSub(null)}>Back</button>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                          {sub.employeeName && <div style={{ fontSize:"0.79rem", color:"var(--pac-accent)", marginTop:2 }}>{sub.employeeName}</div>}
+                          <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{sub.sentDate} at {sub.sentTime}</div>
+                        </div>
+                        <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}`, flexShrink:0 }}>{labels[sub.level]}</span>
+                      </div>
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:7 }}>Status</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {Object.entries(statusLabels).map(([k,v])=>(
+                            <button key={k} style={{ padding:"5px 13px", borderRadius:"var(--pac-radius-full)", border:`1px solid ${(sub.status||"pending")===k?`${statusColors[k].replace("var(","").replace(")","")}-66`:"var(--pac-border-3)"}`, background:(sub.status||"pending")===k?`rgba(0,0,0,0)`:"transparent", color:(sub.status||"pending")===k?statusColors[k]:"var(--pac-text-muted)", outline:(sub.status||"pending")===k?`1px solid ${statusColors[k]}`:"none", cursor:"pointer", fontSize:"0.75rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>updateSub({status:k})}>{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6 }}>HR Notes</div>
+                        <textarea rows={3} style={{ ...s.input, resize:"vertical", fontSize:"16px" }} placeholder="Add internal notes about this check..." value={sub.hrNotes||""} onChange={e=>updateSub({hrNotes:e.target.value})} />
+                      </div>
+                      <div style={{ borderTop:"1px solid var(--pac-border-1)", paddingTop:12, marginBottom:12 }}>
+                        <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:9 }}>Submitted answers</div>
+                        {eqs.map((item,i)=>{ const a=sub.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"var(--pac-good)":a==="no"?"var(--pac-risk)":"var(--pac-warn)";
+                          return (
+                            <div key={i} style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:9, marginTop:9 }}>
+                              <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"var(--pac-text-70)", marginBottom:3 }}>
+                                {item.critical&&<span style={{ fontSize:"0.6rem", fontWeight:700, textTransform:"uppercase", background:"var(--pac-risk-bg)", border:"1px solid var(--pac-risk-border)", color:"var(--pac-risk)", borderRadius:"var(--pac-radius-badge)", padding:"1px 5px", marginRight:6 }}>Critical</span>}
+                                {item.q}
+                              </div>
+                              <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
+                              {sub.notes[i] && <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:3, fontStyle:"italic" }}>{sub.notes[i]}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button style={{ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-risk-bg-alt)", background:"transparent", color:"var(--pac-risk)", cursor:"pointer", fontSize:"0.74rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>{ const updated=hrSubmissions.filter(s=>s.id!==sub.id); setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(null); }}>Delete this record</button>
+                    </div>
+                  );
+                })() : (
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ if(!window.confirm("Delete all HR submissions? This cannot be undone."))return; saveHrSubmissions([]); setHrSubmissions([]); }}>Clear all</button>
+                    </div>
+                    {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"};
+                      return (
+                        <div key={sub.id} onClick={()=>setViewingSub(sub)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                            <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{sub.employeeName?<span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{sub.employeeName} ·</span>:null}{sub.sentDate}</div>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                            <span style={{ fontSize:"0.63rem", fontWeight:700, textTransform:"uppercase", padding:"2px 6px", borderRadius:"var(--pac-radius-badge)", background:"rgba(0,0,0,0.0)", color:statusColors[sub.status||"pending"], border:`1px solid ${statusColors[sub.status||"pending"]}` }}>{statusLabels[sub.status||"pending"]}</span>
+                            <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 6px", borderRadius:"var(--pac-radius-badge)", background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[sub.level]}</span>
+                            <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>View →</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contextual policy snippet during questions ────────────────────────────
+function PolicyHint({ policies, scenario }) {
+  const [expanded, setExpanded] = useState(false);
+  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+  if (relevant.length===0) return null;
+  return (
+    <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:"0.82rem" }}>📄</span>
+          <span style={{ fontSize:"0.8rem", fontWeight:600, color:"var(--pac-accent)" }}>{relevant.length} company document{relevant.length!==1?"s":""} on file for this scenario</span>
+        </div>
+        <button onClick={()=>setExpanded(v=>!v)} style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-65)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600 }}>
+          {expanded?"Hide":"Show"}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ marginTop:10 }}>
+          {relevant.map(doc=>(
+            <div key={doc.id} style={{ background:"var(--pac-surface-2)", borderRadius:8, padding:"9px 11px", marginBottom:6 }}>
+              <div style={{ fontSize:"0.77rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4 }}>{doc.name}</div>
+              <div style={{ fontSize:"0.74rem", color:"var(--pac-text-60)", lineHeight:1.5, maxHeight:120, overflowY:"auto", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                {doc.text.substring(0,600)}{doc.text.length>600?"...":""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────
+function App() {
+  const [step, setStep]               = useState("pick");
+  const [scenario, setScenario]       = useState(null);
+  const [answers, setAnswers]         = useState([]);
+  const [notes, setNotes]             = useState([]);
+  const [hints, setHints]             = useState([]);
+  const [history, setHistory]         = useState([]);
+  const [copied, setCopied]           = useState(false);
+  const [showDocTips, setShowDocTips] = useState(false);
+  const [savedSession, setSavedSession]     = useState(null);
+  const [showResumeBanner, setShowResume]   = useState(false);
+  const [policies, setPolicies]       = useState([]);
+  const [showPolicyLib, setShowPolicyLib]   = useState(false);
+  const [emailAddr, setEmailAddr]           = useState("");
+  const [emailStatus, setEmailStatus]       = useState("idle");
+  const [checkHistory, setCheckHistory]     = useState([]);
+  const [viewingPast, setViewingPast]       = useState(null);
+  const [showHistory, setShowHistory]       = useState(false);
+  const [employeeName, setEmployeeName]     = useState("");
+  const [hrEmail, setHrEmail]               = useState("");
+  const [hrEmailStatus, setHrEmailStatus]   = useState("idle");
+  const [attachments, setAttachments]       = useState([]);
+  const fileInputRef                        = useRef(null);
+  const [followups, setFollowups]           = useState([]);
+  const [followupSaved, setFollowupSaved]   = useState(false);
+  const [slackWebhook, setSlackWebhook]     = useState("");
+  const [teamsWebhook, setTeamsWebhook]     = useState("");
+
+  useEffect(() => {
+    setPolicies(loadPolicies()); setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
+  }, []);
+  useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
+  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
+
+  const resumeSession = () => {
+    if (!savedSession) return;
+    const n=QS[savedSession.scenario].length;
+    setScenario(savedSession.scenario); setStep(savedSession.step);
+    setAnswers(savedSession.answers&&savedSession.answers.length===n?savedSession.answers:new Array(n).fill(null));
+    setNotes(savedSession.notes&&savedSession.notes.length===n?savedSession.notes:new Array(n).fill(""));
+    setHints(new Array(n).fill(false)); setHistory(savedSession.history||[]);
+    setShowResume(false); setSavedSession(null);
+  };
+  const dismissResume = () => { setShowResume(false); setSavedSession(null); clearSession(); };
+
+  const m  = scenario ? META[scenario] : null;
+  const qs = scenario ? QS[scenario]   : [];
+  const answered = answers.filter(a=>a!==null).length;
+  const allDone  = qs.length>0 && answered===qs.length;
+  const sc       = allDone ? computeScore(qs,answers) : null;
+  const liveLevel = () => { if(!answered)return"neutral"; return computeScore(qs,answers).level; };
+
+  const buildReportLines = (forHR) => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const lines = [forHR?`HR Action Check — Submitted for Review`:`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    if(!forHR){
+      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+      if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
+    }
+    if(attachments.length){ lines.push("","--- Attached files:"); attachments.forEach(f=>lines.push(`- ${f.name}`)); }
+    lines.push("","General guidance only — not legal advice.");
+    return lines;
+  };
+
+  const buildReportDocxBase64 = async () => {
+    const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const children = [
+      new Paragraph({ text: "HR Action Check Report", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ children: [new TextRun({ text: `Scenario: ${scenario}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `Result: ${ll2}`, bold: true })] }),
+      new Paragraph({ text: `Date: ${new Date().toLocaleDateString()}` }),
+    ];
+    if (employeeName.trim()) children.push(new Paragraph({ text: `Employee: ${employeeName.trim()}` }));
+    children.push(new Paragraph({ text: "" }));
+    children.push(new Paragraph({ text: "Questions & Answers", heading: HeadingLevel.HEADING_2 }));
+    qs.forEach((item,i)=>{
+      const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know";
+      children.push(new Paragraph({ children:[new TextRun({ text:`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`, bold:true })] }));
+      children.push(new Paragraph({ text:`Answer: ${label}` }));
+      if (notes[i]) children.push(new Paragraph({ text:`Note: ${notes[i]}` }));
+      children.push(new Paragraph({ text:"" }));
+    });
+    children.push(new Paragraph({ text: "Recommended Next Steps", heading: HeadingLevel.HEADING_2 }));
+    STEPS[scenario][sc.level].forEach((st,i)=> children.push(new Paragraph({ text:`${i+1}. ${st}` })));
+    const imageAttachments = attachments.filter(f=>f.type && f.type.startsWith("image/"));
+    const otherAttachments = attachments.filter(f=>!(f.type && f.type.startsWith("image/")));
+    if (imageAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Attached Images", heading: HeadingLevel.HEADING_2 }));
+      imageAttachments.forEach(f=>{
+        children.push(new Paragraph({ text: f.name }));
+        try { children.push(new Paragraph({ children: [ new ImageRun({ data: dataUrlToBytes(f.dataUrl), transformation: { width: 400, height: 300 } }) ] })); } catch(e) {}
+        children.push(new Paragraph({ text:"" }));
+      });
+    }
+    if (otherAttachments.length) {
+      children.push(new Paragraph({ text:"" }));
+      children.push(new Paragraph({ text: "Other Attached Files (sent separately with this email)", heading: HeadingLevel.HEADING_2 }));
+      otherAttachments.forEach(f=> children.push(new Paragraph({ text: `- ${f.name}` })));
+    }
+    children.push(new Paragraph({ text:"" }));
+    children.push(new Paragraph({ text: "General guidance only — not legal advice." }));
+    const doc = new Document({ sections: [{ children }] });
+    return Packer.toBase64String(doc);
+  };
+
+  const downloadReport = async () => {
+    if (!sc) return;
+    const base64 = await buildReportDocxBase64();
+    const bytes = dataUrlToBytes(`data:application/octet-stream;base64,${base64}`);
+    const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `HR-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFilesSelected = (fileList) => {
+    Array.from(fileList).forEach(file=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, { name:file.name, type:file.type, size:file.size, dataUrl:reader.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  const removeAttachment = (idx) => setAttachments(prev => prev.filter((_,i)=>i!==idx));
+
+  const sendEmail = async () => {
+    if (!sc || !emailAddr.includes("@")) return;
+    setEmailStatus("sending");
+    try {
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:emailAddr, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
+      setEmailStatus("sent");
+    } catch(e) { setEmailStatus("error"); }
+  };
+
+  const notifyWebhook = (webhookUrl, data) => {
+    if (!webhookUrl) return;
+    const ll2 = data.level==="good"?"Low Risk":data.level==="warn"?"Elevated Risk":"High Risk";
+    const emoji = data.level==="good"?"🟢":data.level==="warn"?"🟡":"🔴";
+    const themeColor = data.level==="good"?"38A169":data.level==="warn"?"D69E2E":"E53E3E";
+    const steps = STEPS[data.scenario][data.level];
+    const stepsText = steps.map((s,i)=>`${i+1}. ${s}`).join("\n");
+    const isTeams = webhookUrl.includes("office.com") || webhookUrl.includes("webhook.office") || webhookUrl.includes("teams.microsoft");
+    const payload = isTeams ? {
+      "@type":"MessageCard", "@context":"https://schema.org/extensions",
+      "summary":`HR Action Check — ${data.scenario} — ${ll2}`,
+      "themeColor":themeColor,
+      "title":`HR Action Check — ${data.scenario}`,
+      "sections":[{ "facts":[
+        {"name":"Result","value":`${emoji} ${ll2}`},
+        ...(data.employeeName?[{"name":"Employee","value":data.employeeName}]:[]),
+        {"name":"Date","value":data.sentDate},
+        {"name":"Scenario","value":data.scenario}
+      ], "text":`**Recommended next steps:**\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join("\n\n")}` }]
+    } : {
+      "text":`HR Action Check — ${data.scenario} — ${ll2}`,
+      "blocks":[
+        {"type":"header","text":{"type":"plain_text","text":`HR Action Check — ${data.scenario}`,"emoji":true}},
+        {"type":"section","fields":[
+          {"type":"mrkdwn","text":`*Result:*\n${emoji} ${ll2}`},
+          ...(data.employeeName?[{"type":"mrkdwn","text":`*Employee:*\n${data.employeeName}`}]:[]),
+          {"type":"mrkdwn","text":`*Date:*\n${data.sentDate}`}
+        ]},
+        {"type":"section","text":{"type":"mrkdwn","text":`*Recommended next steps:*\n${stepsText}`}},
+        {"type":"divider"},
+        {"type":"context","elements":[{"type":"mrkdwn","text":"HR Action Check · General guidance only, not legal advice"}]}
+      ]
+    };
+    fetch("/api/notify", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({webhookUrl,payload}) }).catch(()=>{});
+  };
+
+  const sendToHR = async () => {
+    if (!sc || !hrEmail.includes("@")) return;
+    setHrEmailStatus("sending");
+    try {
+      const reportBase64 = await buildReportDocxBase64();
+      const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+      const fileAttachments = [
+        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
+      ];
+      const res = await fetch("/api/send-report-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — HR Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
+      });
+      if (!res.ok) throw new Error("send failed");
+      const submission = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
+      const updated = [submission, ...loadHrSubmissions()];
+      saveHrSubmissions(updated);
+      notifyWebhook(slackWebhook, submission);
+      notifyWebhook(teamsWebhook, submission);
+      setHrEmailStatus("sent");
+    } catch(e) { setHrEmailStatus("error"); }
+  };
+
+  const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
+  const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
+  const ans   = (idx,val) => {
+    const next=[...answers]; next[idx]=val; setAnswers(next);
+    if(next.every(a=>a!==null)){
+      const{level}=computeScore(qs,next);
+      setHistory(h=>[{scenario,level,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...h]);
+      const entry={ id:Date.now(), scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim() };
+      setCheckHistory(h=>{ const updated=[entry,...h].slice(0,10); saveCheckHistory(updated); return updated; });
+      clearSession();
+      setStep("result");
+    }
+  };
+  const startNew = () => { clearSession(); setScenario(null); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
+
+  const ll = liveLevel();
+  const liveColors = {neutral:"var(--pac-text-muted)",good:"var(--pac-good)",warn:"var(--pac-warn)",risk:"var(--pac-risk)"};
+  const liveBg     = {neutral:"var(--pac-surface-1)",good:"var(--pac-good-bg-light)",warn:"var(--pac-warn-bg-light)",risk:"var(--pac-risk-bg-light)"};
+  const liveBorder = {neutral:"var(--pac-border-1)",good:"rgba(52,211,153,0.25)",warn:"rgba(251,191,36,0.25)",risk:"rgba(251,113,133,0.25)"};
+  const liveMsgs   = {neutral:"Answer each question to see your risk level update.",good:"Tracking as routine so far.",warn:"Some risk indicators present — finish all questions.",risk:"High-risk signals detected. Review carefully."};
+
+  const s = {
+    wrap:  { fontFamily:"var(--pac-font)", background:"var(--pac-bg-gradient)", minHeight:"100vh", color:"var(--pac-text)", padding:"var(--pac-page-padding)" },
+    card:  { background:"var(--pac-surface-0)", border:"1px solid var(--pac-border-1)", borderRadius:"var(--pac-radius-card)", padding:"var(--pac-card-padding)", marginBottom:20 },
+    label: { fontSize:"var(--pac-text-xs)", letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:10, display:"block" },
+    grid:  { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, marginBottom:22 },
+    scard: (active) => ({ background:active?"var(--pac-accent-card-gradient)":"var(--pac-surface-1)", border:`1px solid ${active?"rgba(34,193,255,0.6)":"var(--pac-border-1)"}`, borderRadius:"var(--pac-radius-2xl)", padding:"13px 12px", cursor:"pointer", display:"flex", flexDirection:"column", gap:6, transition:"var(--pac-transition-fast)" }),
+    badge: (level) => ({ fontSize:"var(--pac-text-xxs)", fontWeight:700, letterSpacing:"0.05em", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", width:"fit-content", textTransform:"uppercase", background:level==="high"?"rgba(251,113,133,0.15)":"rgba(251,191,36,0.12)", color:level==="high"?"var(--pac-risk)":"var(--pac-warn)", border:`1px solid ${level==="high"?"var(--pac-risk-border-alt)":"var(--pac-warn-border-alt)"}` }),
+    btn:   (primary) => ({ padding:primary?"10px 20px":"8px 16px", borderRadius:"var(--pac-radius-full)", border:primary?"1px solid var(--pac-accent-border)":"1px solid var(--pac-border-3)", background:primary?"var(--pac-accent-bg)":"var(--pac-surface-1)", color:primary?"var(--pac-accent)":"var(--pac-text)", cursor:"pointer", fontSize:"var(--pac-text-md)", fontWeight:600, fontFamily:"var(--pac-font)" }),
+  };
+
+  const copySum = () => {
+    if (!sc) return;
+    const ll2=sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
+    const lines=[`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+    if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
+    lines.push("","General guidance only — not legal advice.");
+    navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  };
+
+  return (
+    <div style={s.wrap}>
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
+
+      <div style={{ maxWidth:"var(--pac-content-width)", margin:"0 auto" }} role="main" aria-label="People Action Check">
+
+        {/* Header */}
+        <div style={{ ...s.card }}>
+          <div className="hdr-row" style={{ display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ width:46, height:46, flexShrink:0, borderRadius:12, background:"var(--pac-accent-gradient)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:15, color:"#02111a" }}>HR✓</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:"1.25rem", fontWeight:700 }}>People Action Check</div>
+              <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"var(--pac-text-muted)", marginTop:3 }}>A private confidence check for people-management decisions. Completed checks save to this browser — email yourself to keep a permanent record.</div>
+            </div>
+            <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"var(--pac-accent-border-alt)",color:"var(--pac-accent)",background:"var(--pac-accent-surface)"}:{}) }}>
+              <span>📁</span>
+              <span>Company Policies{policies.length>0?` (${policies.length})`:""}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Resume banner */}
+        {showResumeBanner && savedSession && (
+          <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontSize:"0.85rem", fontWeight:700, color:"var(--pac-accent)", marginBottom:3 }}>You have a saved session</div>
+              <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)" }}>{META[savedSession.scenario].icon} {savedSession.scenario} — {savedSession.step==="result"?"completed":"in progress"}</div>
+            </div>
+            <div className="pac-resume-actions" style={{ display:"flex", gap:8, flexShrink:0 }}>
+              <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
+              <button style={s.btn(false)} onClick={dismissResume}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
+        {/* Scenario grid */}
+        <span style={s.label} id="step1-label">Step 1 — select your situation</span>
+        <div className="pac-scenario-grid" style={s.grid} role="list" aria-labelledby="step1-label">
+          {Object.keys(META).map(name=>{
+            const mm=META[name];
+            return (
+              <div key={name} role="listitem">
+                <div style={s.scard(scenario===name)} onClick={()=>pick(name)} role="button" tabIndex={0} aria-pressed={scenario===name} aria-label={`${mm.icon} ${name} — ${mm.riskLabel}`} onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&pick(name)}>
+                  <div style={{ fontSize:"1.3rem" }} aria-hidden="true">{mm.icon}</div>
+                  <div style={{ fontSize:"0.85rem", fontWeight:600, lineHeight:1.25 }}>{name}</div>
+                  <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Session History Box */}
+        {step==="pick" && (
+          <div style={{ marginBottom:18 }}>
+            <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:"1.1rem" }}>🗂️</span>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
+                  <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
+                </div>
+              </div>
+              <span style={{ color:"var(--pac-text-muted)", fontSize:"0.85rem", flexShrink:0 }}>{showHistory?"▲":"▼"}</span>
+            </div>
+
+            {showHistory && (
+              <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
+                {checkHistory.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
+                ) : (
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ saveCheckHistory([]); setCheckHistory([]); setViewingPast(null); }}>Clear all</button>
+                    </div>
+                    {viewingPast!==null && checkHistory[viewingPast] ? (()=>{
+              const e=checkHistory[viewingPast];
+              const eqs=QS[e.scenario]; const col=C[e.level];
+              const st2=STEPS[e.scenario][e.level];
+              const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+              return (
+                <div style={{ background:"var(--pac-surface-2)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:14, padding:"16px 18px", marginBottom:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{META[e.scenario].icon} {e.scenario}</div>
+                      {e.employeeName && <div style={{ fontSize:"0.8rem", color:"var(--pac-accent)", fontWeight:600, marginTop:2 }}>{e.employeeName}</div>}
+                      <div style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)", marginTop:2 }}>{e.date} at {e.time}</div>
+                    </div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[e.level]}</span>
+                      <button style={s.btn(false)} onClick={()=>setViewingPast(null)}>Close</button>
+                    </div>
+                  </div>
+                  {eqs.map((item,i)=>{ const a=e.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"var(--pac-good)":a==="no"?"var(--pac-risk)":"var(--pac-warn)";
+                    return (
+                      <div key={i} style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:9, marginTop:9 }}>
+                        <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"var(--pac-text-70)", marginBottom:4 }}>{item.q}</div>
+                        <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
+                        {e.notes[i] && <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:3, fontStyle:"italic" }}>{e.notes[i]}</div>}
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop:14, borderTop:"1px solid var(--pac-border-0)", paddingTop:12 }}>
+                    <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:8 }}>Next steps from that check</div>
+                    {st2.map((st,i)=>(
+                      <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:5 }}>
+                        <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })() : (
+              checkHistory.map((e,i)=>{ const col=C[e.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+                return (
+                  <div key={e.id} onClick={()=>setViewingPast(i)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
+                      <div>
+                        <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[e.scenario].icon} {e.scenario}</div>
+                        <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{e.employeeName ? <span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{e.employeeName} ·</span> : null}{e.date} · {e.time}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", background:col.bg, color:col.text, border:`1px solid ${col.border}`, whiteSpace:"nowrap" }}>{labels[e.level]}</span>
+                      <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>View →</span>
+                      <button onClick={ev=>{ ev.stopPropagation(); const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); saveCheckHistory(updated); }} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--pac-risk)", fontSize:"0.85rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit" }} title="Delete">×</button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Follow-up reminders */}
+        {step==="pick" && followups.filter(f=>!f.dismissed).length>0 && (()=>{
+          const active = followups.filter(f=>!f.dismissed).sort((a,b)=>new Date(a.dueDate+`T00:00:00`)-new Date(b.dueDate+`T00:00:00`));
+          const today = new Date(); today.setHours(0,0,0,0);
+          return (
+            <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
+                <span style={{ fontSize:"1.1rem" }}>📅</span>
+                <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
+              </div>
+              {active.map(f=>{
+                const dueDate = new Date(f.dueDate+`T00:00:00`);
+                const isOverdue = dueDate < today;
+                return (
+                  <div key={f.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"var(--pac-surface-2)", border:`1px solid ${isOverdue?"var(--pac-risk-bg-alt)":"var(--pac-warn-border-deep)"}`, borderRadius:"var(--pac-radius-md)", padding:"9px 12px", marginBottom:6, flexWrap:"wrap" }}>
+                    <div>
+                      <div style={{ fontSize:"0.84rem", fontWeight:600 }}>{META[f.scenario].icon} {f.scenario}{f.employeeName?` · ${f.employeeName}`:""}</div>
+                      <div style={{ fontSize:"0.73rem", color:isOverdue?"var(--pac-risk)":"var(--pac-warn)", marginTop:1 }}>{isOverdue?"Overdue — was due":"Due"} {new Date(f.dueDate+`T00:00:00`).toLocaleDateString()}</div>
+                    </div>
+                    <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ const updated=followups.map(fu=>fu.id===f.id?{...fu,dismissed:true}:fu); setFollowups(updated); saveFollowups(updated); }}>Dismiss</button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* Email nudge on pick screen */}
+        {step==="pick" && (
+          <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:"1.2rem", flexShrink:0 }}>📧</span>
+            <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>
+              When you finish your check, you can <strong style={{ color:"var(--pac-accent)" }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
+            </div>
+          </div>
+        )}
+
+        {/* Context panel */}
+        {step!=="pick" && m && (
+          <div style={{ ...s.card, marginBottom:18 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div style={{ fontSize:"1rem", fontWeight:700 }}>{m.icon} {scenario}</div>
+              <div style={s.badge(m.riskLevel)}>{m.riskLabel}</div>
+            </div>
+            <div style={{ fontSize:"0.88rem", color:"var(--pac-text-70)", lineHeight:1.6, marginBottom:14 }}>{m.description}</div>
+            <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Common examples</div>
+            {m.examples.map((ex,i)=>(
+              <div key={i} style={{ display:"flex", gap:9, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-0)", borderRadius:"var(--pac-radius-md)", padding:"9px 12px", fontSize:"0.82rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
+                <span style={{ color:"var(--pac-text-muted)", flexShrink:0 }}>→</span><span>{ex}</span>
+              </div>
+            ))}
+            <div style={{ marginTop:14, marginBottom:4 }}>
+              <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }} onClick={()=>setShowDocTips(v=>!v)}>
+                {showDocTips?"Hide documentation tips":"+ How to document this situation"}
+              </button>
+            </div>
+            {showDocTips && (
+              <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"12px 14px", marginBottom:10 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:8, fontWeight:700 }}>Documentation guidance</div>
+                {m.docTips.map((tip,i)=>(
+                  <div key={i} style={{ display:"flex", gap:9, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
+                    <span style={{ color:"rgba(34,193,255,0.5)", flexShrink:0, fontWeight:700 }}>{i+1}.</span><span>{tip}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-warn-text-90)", lineHeight:1.5, margin:"10px 0 10px" }}>
+              <strong>Watch for:</strong> {m.watch}
+            </div>
+            <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.5, marginBottom:16 }}>
+              <strong>Not sure? Contact HR:</strong> {m.contactHR}
+            </div>
+            {step==="context" && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:600 }}>Employee name <span style={{ color:"var(--pac-text-dim)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></div>
+                <input type="text" placeholder="e.g. Alex Johnson" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", color:"var(--pac-text)", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
+                <div style={{ fontSize:"0.73rem", color:"var(--pac-text-dim)", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
+              </div>
+            )}
+            {step==="context" ? <button style={s.btn(true)} onClick={start}>Start the check</button> : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>}
+          </div>
+        )}
+
+        {/* Questions */}
+        {(step==="questions"||step==="result") && (
+          <div style={{ marginBottom:18 }}>
+            <span style={s.label}>Step 2 — {scenario} check</span>
+            <div style={{ marginBottom:14 }}>
+              <div role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={qs.length} aria-label={`${answered} of ${qs.length} questions answered`} style={{ height:3, background:"var(--pac-border-1)", borderRadius:99, marginBottom:5 }}>
+                <div style={{ height:"100%", borderRadius:99, background:"var(--pac-accent-gradient)", width:`${qs.length?(answered/qs.length)*100:0}%`, transition:"var(--pac-transition-slow)" }} />
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.74rem", color:"var(--pac-text-muted)" }} aria-hidden="true">
+                <span>{answered} of {qs.length} answered</span><span>{qs.length?Math.round((answered/qs.length)*100):0}%</span>
+              </div>
+            </div>
+            <PolicyHint policies={policies} scenario={scenario} />
+            <div role="status" aria-live="polite" aria-label={`Current risk level: ${liveMsgs[ll]}`} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 13px", borderRadius:"var(--pac-radius-md)", fontSize:"0.82rem", fontWeight:600, marginBottom:16, border:`1px solid ${liveBorder[ll]}`, background:liveBg[ll], color:liveColors[ll], transition:"var(--pac-transition-base)" }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:"currentColor", flexShrink:0 }} aria-hidden="true" />
+              {liveMsgs[ll]}
+            </div>
+            {qs.map((item,idx)=>{
+              const a=answers[idx];
+              const rowBg=a==="yes"?"var(--pac-good-bg-alt)":a==="no"?"var(--pac-risk-bg-alt)":a==="unknown"?"var(--pac-warn-bg-light)":"var(--pac-surface-1)";
+              const rowBorder=a==="yes"?"var(--pac-good-border-deep)":a==="no"?"var(--pac-risk-border-deep)":a==="unknown"?"var(--pac-warn-border-deep)":"var(--pac-border-1)";
+              return (
+                <div key={idx} style={{ background:rowBg, border:`1px solid ${rowBorder}`, borderRadius:11, padding:"13px 15px", marginBottom:9, transition:"var(--pac-transition-fast)" }}>
+                  <div className="pac-question-row">
+                    <div style={{ flex:1 }} id={`q-label-${idx}`}>
+                      <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:600, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.04em" }}>Question {idx+1} of {qs.length}</div>
+                      <div style={{ fontSize:"0.88rem", lineHeight:1.5, display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
+                        {item.q}
+                        {item.critical && <span style={{ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase", background:"var(--pac-risk-bg)", border:"1px solid var(--pac-risk-border)", color:"var(--pac-risk)", borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }} aria-label="Critical question">Critical</span>}
+                      </div>
+                      <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-65)", cursor:"pointer", marginTop:5, background:"none", border:"none", fontFamily:"inherit", padding:0 }} aria-expanded={!!hints[idx]} onClick={()=>{const h=[...hints];h[idx]=!h[idx];setHints(h);}}>
+                        {hints[idx]?"Hide":"+ Why this matters"}
+                      </button>
+                      {hints[idx] && <div style={{ fontSize:"0.77rem", color:"var(--pac-text-muted)", marginTop:5, lineHeight:1.45 }}>{item.hint}</div>}
+                    </div>
+                    <div className="pac-ans-group" role="group" aria-labelledby={`q-label-${idx}`}>
+                      {[["Yes","yes"],["No","no"],["?","unknown"]].map(([label,val])=>{
+                        const on=a===val;
+                        const onBg=val==="yes"?"var(--pac-good-bg-strong)":val==="no"?"var(--pac-risk-bg-strong)":"var(--pac-warn-bg-strong)";
+                        const onBorder=val==="yes"?"var(--pac-good-border-strong)":val==="no"?"var(--pac-risk-border-strong)":"var(--pac-warn-border-strong)";
+                        const onColor=val==="yes"?"var(--pac-good)":val==="no"?"var(--pac-risk)":"var(--pac-warn)";
+                        const ariaLabel=val==="yes"?"Yes":val==="no"?"No":"Don't know";
+                        return <button key={val} className="ans-btn" aria-label={ariaLabel} aria-pressed={on} style={{ padding:"5px 12px", borderRadius:"var(--pac-radius-full)", border:`1px solid ${on?onBorder:"var(--pac-border-3)"}`, background:on?onBg:"transparent", color:on?onColor:"var(--pac-text)", cursor:"pointer", fontWeight:600, fontSize:"0.77rem", minWidth:46, fontFamily:"inherit" }} onClick={()=>ans(idx,val)}>{label}</button>;
+                      })}
+                    </div>
+                  </div>
+                  {a!==null && <textarea rows={2} className="notes-ta" placeholder="Add context or notes (optional)..." style={{ width:"100%", marginTop:9, background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-2)", borderRadius:7, padding:"7px 10px", color:"var(--pac-text)", fontSize:"0.79rem", fontFamily:"inherit", resize:"none", outline:"none" }} value={notes[idx]||""} onChange={e=>{const n=[...notes];n[idx]=e.target.value;setNotes(n);}} />}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Result */}
+        {step==="result" && sc && (()=>{
+          const col=C[sc.level];
+          const st2=STEPS[scenario][sc.level];
+          const titles={good:"Routine management action — proceed carefully.",warn:"Elevated risk — pause and address gaps before acting.",risk:"High risk — do not proceed without HR or legal review."};
+          const summaries={good:"Your answers indicate this situation is within standard management scope. Document each step you take.",warn:"One or more answers reveal gaps in process, documentation, or legal review. Resolve these before taking action.",risk:"Critical risk factors are present. Acting without HR or legal involvement exposes you and the organization significantly."};
+          const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
+          const dn=qs.length-sc.yes-sc.no;
+          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+          return (
+            <div role="region" aria-label="Assessment result">
+              <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
+                <span style={{ fontSize:"1.1rem", flexShrink:0 }}>📧</span>
+                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, <strong style={{ color:"var(--pac-accent)" }}>enter your email at the bottom of this page</strong> to send yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
+              </div>
+              <span style={s.label}>Assessment</span>
+              {sc.crit && <div style={{ background:"var(--pac-risk-bg-light)", border:"1px solid var(--pac-risk-border-med)", borderRadius:11, padding:"12px 14px", fontSize:"0.84rem", color:"var(--pac-risk-text-90)", lineHeight:1.55, marginBottom:11 }}><strong>Critical question not confirmed.</strong> One or more questions marked Critical were answered No or Don't Know. These carry significant legal exposure. HR and legal review is required before any action.</div>}
+              {sc.unk>0 && <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:10, padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-warn-text-85)", lineHeight:1.5, marginBottom:11 }}>{sc.unk} question{sc.unk>1?"s were":" was"} answered "Don't know." Uncertainty is a risk signal and has been factored into the score.</div>}
+              <div style={{ background:col.bg, border:`1px solid ${col.border}`, borderRadius:14, padding:"18px 20px", marginBottom:12 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.09em", textTransform:"uppercase", fontWeight:700, color:col.text, marginBottom:4, opacity:0.85 }}>{labels[sc.level]}</div>
+                <div style={{ fontSize:"1rem", fontWeight:700, color:col.light, marginBottom:6 }}>{titles[sc.level]}</div>
+                <div style={{ fontSize:"0.86rem", lineHeight:1.6, opacity:0.84, marginBottom:14 }}>{summaries[sc.level]}</div>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Recommended next steps</div>
+                {st2.map((st,i)=>(
+                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:9, fontSize:"0.84rem", lineHeight:1.5, padding:"8px 11px", background:"var(--pac-surface-1)", borderRadius:8, border:"1px solid var(--pac-border-0)", marginBottom:6 }}>
+                    <span style={{ fontSize:"0.68rem", fontWeight:700, width:18, height:18, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1, background:`${col.text}22`, color:col.text }}>{i+1}</span>
+                    <span>{st}</span>
+                  </div>
+                ))}
+              </div>
+              {rel.length>0 && (
+                <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:11, padding:"13px 16px", marginBottom:12 }}>
+                  <div style={{ fontSize:"0.7rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:9, fontWeight:700 }}>Company documents on file for this scenario</div>
+                  {rel.map(doc=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category); return (
+                    <div key={doc.id} style={{ display:"flex", alignItems:"center", gap:10, background:"var(--pac-surface-2)", borderRadius:8, padding:"8px 11px", marginBottom:6 }}>
+                      <span style={{ fontSize:"0.9rem" }}>📄</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:"0.82rem", fontWeight:700 }}>{doc.name}</div>
+                        <div style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)" }}>{cat?.label} · {(doc.chars/1000).toFixed(1)}k chars</div>
+                      </div>
+                      <button style={{ ...s.btn(false), padding:"4px 10px", fontSize:"0.73rem" }} onClick={()=>setShowPolicyLib(true)}>View</button>
+                    </div>
+                  );})}
+                </div>
+              )}
+              <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:10, padding:"10px 14px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.55, marginBottom:12 }}>
+                <strong>Still not sure?</strong> {META[scenario].contactHR}
+              </div>
+              <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-1)", borderRadius:11, padding:"14px 16px", marginBottom:12 }}>
+                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:10 }}>Answer breakdown</div>
+                {[["Yes",sc.yes,"var(--pac-good)"],["No",sc.no,"var(--pac-risk)"],["Don't know",dn,"var(--pac-warn)"]].map(([label,count,color])=>(
+                  <div key={label} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:7 }}>
+                    <div style={{ fontSize:"0.78rem", width:90, flexShrink:0, color:"var(--pac-text-70)" }}>{label}</div>
+                    <div style={{ flex:1, height:5, background:"var(--pac-border-1)", borderRadius:99, overflow:"hidden" }}>
+                      <div style={{ height:"100%", background:color, borderRadius:99, width:`${qs.length?(count/qs.length)*100:0}%`, transition:"var(--pac-transition-slow)" }} />
+                    </div>
+                    <div style={{ fontSize:"0.77rem", color:"var(--pac-text-muted)", width:20, textAlign:"right" }}>{count}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="pac-result-actions">
+                <button style={s.btn(true)} onClick={start}>Run again</button>
+                <button style={s.btn(false)} onClick={startNew}>New situation</button>
+                <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
+                <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
+              </div>
+              {/* 30-day follow-up */}
+              {(()=>{
+                const due = new Date(); due.setDate(due.getDate()+30);
+                const dueDateISO = `${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,"0")}-${String(due.getDate()).padStart(2,"0")}`;
+                const dueDateDisplay = due.toLocaleDateString();
+                return (
+                  <div style={{ marginTop:12, background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:14, padding:"18px 18px" }}>
+                    <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4 }}>📅 Set a 30-day follow-up</div>
+                    <div style={{ fontSize:"0.83rem", color:"var(--pac-text-65)", lineHeight:1.55, marginBottom:14 }}>Come back on <strong style={{ color:"var(--pac-warn)" }}>{dueDateDisplay}</strong> to review progress on this situation. A reminder will appear on your home screen.</div>
+                    {followupSaved ? (
+                      <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
+                    ) : (
+                      <button style={{ ...s.btn(false), borderColor:"var(--pac-warn-border-deep)", color:"var(--pac-warn)" }} onClick={()=>{
+                        const entry = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO, dismissed:false };
+                        const updated = [entry, ...followups]; setFollowups(updated); saveFollowups(updated); setFollowupSaved(true);
+                      }}>Save reminder</button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Attach supporting files */}
+              <div style={{ marginTop:12, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-2)", borderRadius:14, padding:"18px 18px" }}>
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Attach supporting files (optional)</div>
+                <div style={{ fontSize:"0.8rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Tip: before attaching, consider combining emails, Slack/Teams messages, and other documentation into one Word document — it'll come through more cleanly. Screenshots and photos are embedded directly into the report below; other file types are attached separately and sent alongside it.</div>
+                <input ref={fileInputRef} type="file" multiple style={{ display:"none" }} onChange={e=>{ if(e.target.files&&e.target.files.length) handleFilesSelected(e.target.files); e.target.value=""; }} />
+                <button style={s.btn(false)} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>+ Attach files</button>
+                {attachments.length>0 && (
+                  <div style={{ marginTop:12 }}>
+                    {attachments.map((f,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-1)", borderRadius:8, padding:"7px 11px", marginBottom:6 }}>
+                        <div style={{ fontSize:"0.79rem", color:"var(--pac-text-70)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name} <span style={{ color:"var(--pac-text-muted)" }}>({Math.round(f.size/1024)} KB)</span></div>
+                        <button onClick={()=>removeAttachment(i)} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--pac-risk)", fontSize:"0.9rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit", flexShrink:0 }} title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Combined send card */}
+              <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
+                {/* Email to self */}
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Email this to yourself</div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to your inbox. Add notes and bring it to HR.</div>
+                {emailStatus==="sent" ? (
+                  <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
+                ) : (
+                  <div>
+                    <div className="pac-email-row">
+                      <input type="email" className="email-input" placeholder="your@email.com" value={emailAddr} onChange={e=>{ setEmailAddr(e.target.value); setEmailStatus("idle"); }} aria-label="Your email address" style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"11px 14px", color:"var(--pac-text)", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
+                      <button style={{ ...s.btn(true), padding:"11px 20px", opacity:emailStatus==="sending"?0.6:1 }} onClick={sendEmail} disabled={emailStatus==="sending"||!emailAddr.includes("@")} aria-disabled={emailStatus==="sending"||!emailAddr.includes("@")}>
+                        {emailStatus==="sending"?"Sending...":"Send to my email"}
+                      </button>
+                    </div>
+                    {emailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)", marginTop:6 }}>Something went wrong. Try again or use Copy Summary above.</div>}
+                  </div>
+                )}
+
+                <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
+
+                {/* Send to HR */}
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send to HR</div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard.</div>
+                {!hrEmail ? (
+                  <div style={{ fontSize:"0.81rem", color:"var(--pac-text-muted)", lineHeight:1.5 }}>HR email not configured yet — an admin can set it in Company Policies → Upload Files.</div>
+                ) : hrEmailStatus==="sent" ? (
+                  <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Sent to HR</div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:"0.77rem", color:"var(--pac-text-muted)", marginBottom:10 }}>Sending to: <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong></div>
+                    <button style={{ ...s.btn(true), opacity:hrEmailStatus==="sending"?0.6:1 }} onClick={sendToHR} disabled={hrEmailStatus==="sending"}>
+                      {hrEmailStatus==="sending"?"Sending...":"Send to HR"}
+                    </button>
+                    {hrEmailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)", marginTop:6 }}>Something went wrong. Try again.</div>}
+                  </div>
+                )}
+
+                <div style={{ borderTop:"1px solid var(--pac-border-2)", marginTop:16, paddingTop:16 }}>
+                  <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={startNew}>Start a new check</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Session history (in-page) */}
+        {history.length>0 && (
+          <div style={{ marginTop:24, borderTop:"1px solid var(--pac-border-1)", paddingTop:18 }}>
+            <span style={s.label}>Session history</span>
+            {history.map((e,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-1)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.82rem", marginBottom:6 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                  <div style={{ width:7, height:7, borderRadius:"50%", background:C[e.level].text, flexShrink:0 }} />
+                  <div><div style={{ fontWeight:600 }}>{META[e.scenario].icon} {e.scenario}</div><div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>{e.time}</div></div>
+                </div>
+                <div style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", background:C[e.level].bg, color:C[e.level].text }}>{e.level==="good"?"Low Risk":e.level==="warn"?"Elevated":"High Risk"}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"var(--pac-text-muted)", lineHeight:1.8 }}>
+          General guidance only — not legal advice.<br />
+          Your progress and company policies save automatically to this browser.<br />
+          © 2025 Melissa A. Weiss. All rights reserved.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
