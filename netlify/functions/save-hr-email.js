@@ -1,10 +1,15 @@
 const { hrConfigStore } = require("./lib/blob-store");
 
+// PAC_ADMIN_TOKEN: optional env var. When set, all write requests must include
+// "Authorization: Bearer <token>" — set this in Netlify site environment variables.
+// If not set, the function allows writes without auth (backwards-compatible default).
+const ADMIN_TOKEN = process.env.PAC_ADMIN_TOKEN;
+
 exports.handler = async function (event) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 
   if (event.httpMethod === "OPTIONS") {
@@ -12,6 +17,13 @@ exports.handler = async function (event) {
   }
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, headers, body: "" };
+  }
+
+  if (ADMIN_TOKEN) {
+    const auth = (event.headers["authorization"] || event.headers["Authorization"] || "").replace("Bearer ", "");
+    if (auth !== ADMIN_TOKEN) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: "Unauthorized" }) };
+    }
   }
 
   let hrEmail;

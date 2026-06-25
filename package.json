@@ -6,7 +6,7 @@
     "@netlify/blobs": "^8.1.0"
   },
   "devDependencies": {
-    "vitest": "^1.6.0"
+    "vitest": "^4.1.9"
   },
   "scripts": {
     "test": "vitest run",

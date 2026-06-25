@@ -96,6 +96,8 @@ function saveSlackWebhook(v)  { try { localStorage.setItem(SLACK_WEBHOOK_KEY, v)
 function loadTeamsWebhook()   { try { return localStorage.getItem(TEAMS_WEBHOOK_KEY)||""; } catch(e){return "";} }
 function saveTeamsWebhook(v)  { try { localStorage.setItem(TEAMS_WEBHOOK_KEY, v); } catch(e) {} }
 
+// CANONICAL SOURCE: src/core/scenarios.js — edit scenario data there, not here.
+// This copy exists only to keep the current web app running until the Phase 3 build migration.
 const POLICY_CATEGORIES = [
   { id:"attendance",    label:"Attendance & Leave",       color:"#fbbf24", scenarios:["Attendance Issue","Leave of Absence"] },
   { id:"performance",   label:"Performance Management",   color:"#34d399", scenarios:["Performance Decline","Termination Consideration"] },
@@ -145,6 +147,7 @@ const STEPS = {
   "Leave of Absence":         {good:["Provide all required leave paperwork within the legally required timeframe.","Communicate clearly in writing about return-to-work expectations and the extension process.","Document all leave-related conversations, approvals, and certifications."],warn:["Identify the applicable leave type before taking any action.","Do not count leave-protected absences in any attendance discipline or performance review.","Consult HR on whether state leave laws provide protections beyond the federal minimum."],risk:["Stop. Taking any action while leave protections are unconfirmed is high-risk.","Escalate to HR today to identify all applicable leave laws and employer obligations.","Legal review is required before any action — including denial of leave or attendance discipline."]}
 };
 
+// CANONICAL SOURCE: src/core/scoring.js — edit scoring logic there, not here.
 function computeScore(qs, answers) {
   let wNo=0,total=0,crit=false,unk=0,yes=0,no=0;
   qs.forEach((item,i)=>{ const a=answers[i]; total+=item.weight; if(a==="yes")yes++; if(a==="no"){no++;wNo+=item.weight;if(item.critical)crit=true;} if(a==="unknown"){unk++;wNo+=item.weight*0.75;if(item.critical)crit=true;} });
@@ -176,7 +179,15 @@ function PinGate({ onUnlock, mode }) {
   const handleUnlock = async () => {
     const hash = await sha256(pin);
     const stored = loadPinHash();
-    if (hash === stored) { onUnlock(); }
+    if (hash === stored) {
+      if (stored === DEFAULT_PIN_HASH) {
+        setError("Default PIN must be changed before first use.");
+        setChanging(true);
+        setPin("");
+      } else {
+        onUnlock();
+      }
+    }
     else { setError("Incorrect PIN."); setPin(""); triggerShake(); }
   };
 
@@ -206,7 +217,7 @@ function PinGate({ onUnlock, mode }) {
     <div style={s.wrap}>
       <div style={s.lockIcon}>🔒</div>
       <div style={s.title}>HR Access Only</div>
-      <div style={s.sub}>Enter your HR PIN to upload or manage company policies. Default PIN is 1234 — change it after first login.</div>
+      <div style={s.sub}>Enter your admin PIN to manage company policies. You will be required to set a new PIN if you haven't already.</div>
       <div key={shakeKey} className={shakeKey ? "shake" : ""}>
         <input ref={inputRef} style={s.input} type="password" placeholder="Enter PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleUnlock()} maxLength={20} />
       </div>
