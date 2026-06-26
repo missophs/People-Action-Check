@@ -9,4 +9,13 @@ function hrConfigStore() {
   return getStore("hr-action-check-config");
 }
 
-module.exports = { hrConfigStore };
+function caseStore() {
+  const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN;
+  if (siteID && token) {
+    return getStore({ name: "pac-cases", siteID, token });
+  }
+  return getStore("pac-cases");
+}
+
+module.exports = { hrConfigStore, caseStore };
