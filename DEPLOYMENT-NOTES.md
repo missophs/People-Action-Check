@@ -41,7 +41,7 @@ Independent of the blank-page bug, the webhook-notify feature (`/api/notify`, us
 
 ## Brevo configuration status
 
-`BREVO_API_KEY` and `BREVO_SENDER_EMAIL` (sender: `melissaw212@gmail.com`) are set as Netlify environment variables (Site configuration → Environment variables). Set 2026-06-16.
+`BREVO_API_KEY` and `BREVO_SENDER_EMAIL` are set as Netlify environment variables (Site configuration → Environment variables). Set 2026-06-16.
 
 ## How notifications work (for reference)
 
@@ -81,7 +81,7 @@ Independent of the blank-page bug, the webhook-notify feature (`/api/notify`, us
 - `token` comes from `process.env.NETLIFY_BLOBS_TOKEN`, a **Personal Access Token** that must be created manually (Netlify → User settings → Applications → Personal access tokens → New access token) and added as a site environment variable. **Scopes must include "Functions"** (or just select "All scopes") — the first attempt failed silently because the variable was saved without the right scope, so the function never saw it. Confirmed via a temporary debug field on the 500 response (since removed) showing `hasSiteId:true, hasToken:false`.
 - This token is a third secret to keep alongside `BREVO_API_KEY` / `BREVO_SENDER_EMAIL` — if it's ever revoked or rotated, `/api/get-hr-email` and `/api/save-hr-email` will start 500ing again with the same Blobs error.
 
-**Verified:** `curl https://hractioncheck.netlify.app/api/get-hr-email` → `{"hrEmail":"melissaw212@gmail.com"}`. Save/load round-trip tested via curl before confirming through the actual UI.
+**Verified:** `curl https://hractioncheck.netlify.app/api/get-hr-email` → `{"hrEmail":"<redacted>"}`. Save/load round-trip tested via curl before confirming through the actual UI.
 
 ## Verifying after future changes
 
