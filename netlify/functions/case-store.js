@@ -1,7 +1,8 @@
 const { caseStore } = require("./lib/blob-store");
 
-// PAC_ADMIN_TOKEN guards write (POST/DELETE) endpoints.
-// Read endpoints (GET) are public — any authenticated Slack user can list their own cases.
+// PAC_ADMIN_TOKEN: required env var. Guards all write (POST/DELETE) endpoints and list-all GET.
+// Missing → 503 (misconfiguration). Wrong token → 401.
+// Read endpoints scoped to a managerId are public (Slack users can list their own cases).
 const ADMIN_TOKEN = process.env.PAC_ADMIN_TOKEN;
 
 const HEADERS = {
@@ -17,9 +18,9 @@ function fail(status, msg) {
   return { statusCode: status, headers: HEADERS, body: JSON.stringify({ error: msg }) };
 }
 function checkWriteAuth(event) {
-  if (!ADMIN_TOKEN) return true;
+  if (!ADMIN_TOKEN) return "misconfigured";
   const auth = (event.headers["authorization"] || event.headers["Authorization"] || "").replace("Bearer ", "");
-  return auth === ADMIN_TOKEN;
+  return auth === ADMIN_TOKEN ? "ok" : "unauthorized";
 }
 function blobKey(managerId, caseId) {
   return `case/${managerId}/${caseId}`;
@@ -48,7 +49,9 @@ exports.handler = async function (event) {
         return ok({ cases });
       }
       // list all — admin only
-      if (!checkWriteAuth(event)) return fail(401, "Unauthorized");
+      const authResult = checkWriteAuth(event);
+      if (authResult === "misconfigured") return fail(503, "PAC_ADMIN_TOKEN not configured");
+      if (authResult === "unauthorized") return fail(401, "Unauthorized");
       const { blobs } = await store.list({ prefix: "case/" });
       const cases = (
         await Promise.all(blobs.map((b) => store.get(b.key)))
@@ -59,7 +62,9 @@ exports.handler = async function (event) {
     }
 
     if (event.httpMethod === "POST") {
-      if (!checkWriteAuth(event)) return fail(401, "Unauthorized");
+      const authResult = checkWriteAuth(event);
+      if (authResult === "misconfigured") return fail(503, "PAC_ADMIN_TOKEN not configured");
+      if (authResult === "unauthorized") return fail(401, "Unauthorized");
       let caseRecord;
       try {
         ({ case: caseRecord } = JSON.parse(event.body || "{}"));
@@ -75,7 +80,9 @@ exports.handler = async function (event) {
     }
 
     if (event.httpMethod === "DELETE") {
-      if (!checkWriteAuth(event)) return fail(401, "Unauthorized");
+      const authResult = checkWriteAuth(event);
+      if (authResult === "misconfigured") return fail(503, "PAC_ADMIN_TOKEN not configured");
+      if (authResult === "unauthorized") return fail(401, "Unauthorized");
       if (!managerId || !caseId) return fail(400, "managerId and caseId required");
       await store.delete(blobKey(managerId, caseId));
       return ok({ ok: true });
