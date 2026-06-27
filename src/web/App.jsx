@@ -6,6 +6,29 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
 
+// ── Inline SVG icon system ────────────────────────────────────────────────
+const ICONS = {
+  lock:          `<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
+  key:           `<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>`,
+  folder:        `<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>`,
+  folderOpen:    `<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>`,
+  inbox:         `<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>`,
+  fileText:      `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>`,
+  history:       `<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/>`,
+  calendar:      `<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
+  mail:          `<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>`,
+  check:         `<polyline points="20 6 9 17 4 12"/>`,
+  alertTriangle: `<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>`,
+  paperclip:     `<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>`,
+  chevronDown:   `<polyline points="6 9 12 15 18 9"/>`,
+  chevronUp:     `<polyline points="18 15 12 9 6 15"/>`,
+};
+function Icon({ name, size=16, color="currentColor", style={} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" style={{ display:"inline-block", flexShrink:0, verticalAlign:"middle", ...style }} dangerouslySetInnerHTML={{ __html: ICONS[name] || "" }} aria-hidden="true" />
+  );
+}
+
 // ── PIN Gate ──────────────────────────────────────────────────────────────
 function PinGate({ onUnlock, mode }) {
   const [pin, setPin]            = useState("");
@@ -44,7 +67,7 @@ function PinGate({ onUnlock, mode }) {
 
   const s = {
     wrap:     { padding:"24px 22px", textAlign:"center" },
-    lockIcon: { fontSize:"2rem", marginBottom:12 },
+    lockIcon: { marginBottom:12, display:"flex", justifyContent:"center" },
     title:    { fontSize:"0.9rem", fontWeight:700, color:"var(--pac-text)", marginBottom:6 },
     sub:      { fontSize:"0.78rem", color:"var(--pac-text-muted)", lineHeight:1.5, marginBottom:18 },
     input:    { width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", color:"var(--pac-text)", fontSize:"0.9rem", fontFamily:"inherit", outline:"none", textAlign:"center", letterSpacing:"0.2em", marginBottom:10 },
@@ -55,7 +78,7 @@ function PinGate({ onUnlock, mode }) {
 
   if (!changing) return (
     <div style={s.wrap}>
-      <div style={s.lockIcon}>🔒</div>
+      <div style={s.lockIcon}><Icon name="lock" size={32} color="var(--pac-accent)" /></div>
       <div style={s.title}>HR Access Only</div>
       <div style={s.sub}>Enter your admin PIN to manage company policies. You will be required to set a new PIN if you haven't already.</div>
       <div key={shakeKey} className={shakeKey ? "shake" : ""}>
@@ -69,7 +92,7 @@ function PinGate({ onUnlock, mode }) {
 
   return (
     <div style={s.wrap}>
-      <div style={s.lockIcon}>🔑</div>
+      <div style={s.lockIcon}><Icon name="key" size={32} color="var(--pac-accent)" /></div>
       <div style={s.title}>Change HR PIN</div>
       <div style={s.sub}>Enter your current PIN, then set a new one.</div>
       <input style={s.input} type="password" placeholder="Current PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} maxLength={20} />
@@ -215,7 +238,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
             <div>
               {policies.length===0 ? (
                 <div style={{ textAlign:"center", padding:"32px 0", color:"var(--pac-text-muted)" }}>
-                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📁</div>
+                  <div style={{ marginBottom:12, display:"flex", justifyContent:"center" }}><Icon name="folder" size={40} color="var(--pac-text-dim)" /></div>
                   <div style={{ fontSize:"0.88rem" }}>No policies on file yet.</div>
                   <div style={{ fontSize:"0.79rem", marginTop:6, color:"var(--pac-text-dim)" }}>HR can add documents using the Upload or Paste tabs.</div>
                 </div>
@@ -286,7 +309,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   onDragLeave={()=>setDragActive(false)}
                   onDrop={e=>{e.preventDefault();setDragActive(false);handleFiles(e.dataTransfer.files);}}
                 >
-                  <div style={{ fontSize:"2rem", marginBottom:8 }}>📂</div>
+                  <div style={{ marginBottom:10, display:"flex", justifyContent:"center" }}><Icon name="folderOpen" size={40} color={dragActive?"var(--pac-accent)":"var(--pac-text-muted)"} /></div>
                   <div style={{ fontSize:"0.88rem", fontWeight:600, color:"var(--pac-text)", marginBottom:4 }}>Drop files here or click to browse</div>
                   <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)" }}>.txt, .pdf, .doc, .docx, .md — up to 5MB each</div>
                   <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
@@ -391,7 +414,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
               <div>
                 {hrSubmissions.length===0 ? (
                   <div style={{ textAlign:"center", padding:"32px 0", color:"var(--pac-text-muted)" }}>
-                    <div style={{ fontSize:"2rem", marginBottom:8 }}>📬</div>
+                    <div style={{ marginBottom:12, display:"flex", justifyContent:"center" }}><Icon name="inbox" size={40} color="var(--pac-text-dim)" /></div>
                     <div style={{ fontSize:"0.88rem" }}>No checks submitted to HR yet.</div>
                     <div style={{ fontSize:"0.79rem", marginTop:6, color:"var(--pac-text-dim)" }}>When someone uses "Send to HR" on their results screen, the check will appear here.</div>
                   </div>
@@ -489,7 +512,7 @@ function PolicyHint({ policies, scenario }) {
     <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:"0.82rem" }}>📄</span>
+          <Icon name="fileText" size={16} color="var(--pac-accent)" />
           <span style={{ fontSize:"0.8rem", fontWeight:600, color:"var(--pac-accent)" }}>{relevant.length} company document{relevant.length!==1?"s":""} on file for this scenario</span>
         </div>
         <button onClick={()=>setExpanded(v=>!v)} style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-65)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600 }}>
@@ -568,7 +591,7 @@ function App() {
 
   const buildReportLines = (forHR) => {
     const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines = [forHR?`HR Action Check — Submitted for Review`:`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
+    const lines = [forHR?`People Action Check — Submitted for Review`:`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
     qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
     const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
     if(!forHR){
@@ -583,7 +606,7 @@ function App() {
   const buildReportDocxBase64 = async () => {
     const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
     const children = [
-      new Paragraph({ text: "HR Action Check Report", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "People Action Check Report", heading: HeadingLevel.HEADING_1 }),
       new Paragraph({ children: [new TextRun({ text: `Scenario: ${scenario}`, bold: true })] }),
       new Paragraph({ children: [new TextRun({ text: `Result: ${ll2}`, bold: true })] }),
       new Paragraph({ text: `Date: ${new Date().toLocaleDateString()}` }),
@@ -629,7 +652,7 @@ function App() {
     const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `HR-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
+    a.href = url; a.download = `People-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -652,7 +675,7 @@ function App() {
       const reportBase64 = await buildReportDocxBase64();
       const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
       const fileAttachments = [
-        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        { filename: `People-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
         ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
       ];
       const res = await fetch("/api/send-report-email", {
@@ -674,9 +697,9 @@ function App() {
     const isTeams = webhookUrl.includes("office.com") || webhookUrl.includes("webhook.office") || webhookUrl.includes("teams.microsoft");
     const payload = isTeams ? {
       "@type":"MessageCard", "@context":"https://schema.org/extensions",
-      "summary":`HR Action Check — ${data.scenario} — ${ll2}`,
+      "summary":`People Action Check — ${data.scenario} — ${ll2}`,
       "themeColor":themeColor,
-      "title":`HR Action Check — ${data.scenario}`,
+      "title":`People Action Check — ${data.scenario}`,
       "sections":[{ "facts":[
         {"name":"Result","value":`${emoji} ${ll2}`},
         ...(data.employeeName?[{"name":"Employee","value":data.employeeName}]:[]),
@@ -684,9 +707,9 @@ function App() {
         {"name":"Scenario","value":data.scenario}
       ], "text":`**Recommended next steps:**\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join("\n\n")}` }]
     } : {
-      "text":`HR Action Check — ${data.scenario} — ${ll2}`,
+      "text":`People Action Check — ${data.scenario} — ${ll2}`,
       "blocks":[
-        {"type":"header","text":{"type":"plain_text","text":`HR Action Check — ${data.scenario}`,"emoji":true}},
+        {"type":"header","text":{"type":"plain_text","text":`People Action Check — ${data.scenario}`,"emoji":true}},
         {"type":"section","fields":[
           {"type":"mrkdwn","text":`*Result:*\n${emoji} ${ll2}`},
           ...(data.employeeName?[{"type":"mrkdwn","text":`*Employee:*\n${data.employeeName}`}]:[]),
@@ -694,7 +717,7 @@ function App() {
         ]},
         {"type":"section","text":{"type":"mrkdwn","text":`*Recommended next steps:*\n${stepsText}`}},
         {"type":"divider"},
-        {"type":"context","elements":[{"type":"mrkdwn","text":"HR Action Check · General guidance only, not legal advice"}]}
+        {"type":"context","elements":[{"type":"mrkdwn","text":"People Action Check · General guidance only, not legal advice"}]}
       ]
     };
     fetch("/api/notify", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({webhookUrl,payload}) }).catch(()=>{});
@@ -707,12 +730,12 @@ function App() {
       const reportBase64 = await buildReportDocxBase64();
       const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
       const fileAttachments = [
-        { filename: `HR-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        { filename: `People-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
         ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
       ];
       const res = await fetch("/api/send-report-email", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — HR Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
+        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — People Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
       });
       if (!res.ok) throw new Error("send failed");
       const submission = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
@@ -758,7 +781,7 @@ function App() {
   const copySum = () => {
     if (!sc) return;
     const ll2=sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines=[`HR Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
+    const lines=[`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
     qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
     const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
     const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
@@ -776,13 +799,15 @@ function App() {
         {/* Header */}
         <div style={{ ...s.card }}>
           <div className="hdr-row" style={{ display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ width:46, height:46, flexShrink:0, borderRadius:12, background:"var(--pac-accent-gradient)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:15, color:"#02111a" }}>HR✓</div>
+            <div style={{ width:46, height:46, flexShrink:0, borderRadius:12, background:"var(--pac-accent-gradient)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#02111a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:"1.25rem", fontWeight:700 }}>People Action Check</div>
               <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"var(--pac-text-muted)", marginTop:3 }}>A private confidence check for people-management decisions. Completed checks save to this browser — email yourself to keep a permanent record.</div>
             </div>
             <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"var(--pac-accent-border-alt)",color:"var(--pac-accent)",background:"var(--pac-accent-surface)"}:{}) }}>
-              <span>📁</span>
+              <Icon name="folder" size={14} />
               <span>Company Policies{policies.length>0?` (${policies.length})`:""}</span>
             </button>
           </div>
@@ -824,7 +849,7 @@ function App() {
           <div style={{ marginBottom:18 }}>
             <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:"1.1rem" }}>🗂️</span>
+                <Icon name="history" size={20} color="var(--pac-text)" />
                 <div>
                   <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
                   <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
@@ -913,7 +938,7 @@ function App() {
           return (
             <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
-                <span style={{ fontSize:"1.1rem" }}>📅</span>
+                <Icon name="calendar" size={18} color="var(--pac-warn)" />
                 <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
               </div>
               {active.map(f=>{
@@ -936,7 +961,7 @@ function App() {
         {/* Email nudge on pick screen */}
         {step==="pick" && (
           <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
-            <span style={{ fontSize:"1.2rem", flexShrink:0 }}>📧</span>
+            <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
             <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>
               When you finish your check, you can <strong style={{ color:"var(--pac-accent)" }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
             </div>
@@ -1054,7 +1079,7 @@ function App() {
           return (
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
-                <span style={{ fontSize:"1.1rem", flexShrink:0 }}>📧</span>
+                <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
                 <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, <strong style={{ color:"var(--pac-accent)" }}>enter your email at the bottom of this page</strong> to send yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
               </div>
               <span style={s.label}>Assessment</span>
@@ -1077,7 +1102,7 @@ function App() {
                   <div style={{ fontSize:"0.7rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:9, fontWeight:700 }}>Company documents on file for this scenario</div>
                   {rel.map(doc=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category); return (
                     <div key={doc.id} style={{ display:"flex", alignItems:"center", gap:10, background:"var(--pac-surface-2)", borderRadius:8, padding:"8px 11px", marginBottom:6 }}>
-                      <span style={{ fontSize:"0.9rem" }}>📄</span>
+                      <Icon name="fileText" size={18} color="var(--pac-accent)" />
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:"0.82rem", fontWeight:700 }}>{doc.name}</div>
                         <div style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)" }}>{cat?.label} · {(doc.chars/1000).toFixed(1)}k chars</div>
@@ -1115,7 +1140,7 @@ function App() {
                 const dueDateDisplay = due.toLocaleDateString();
                 return (
                   <div style={{ marginTop:12, background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:14, padding:"18px 18px" }}>
-                    <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4 }}>📅 Set a 30-day follow-up</div>
+                    <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4, display:"flex", alignItems:"center", gap:8 }}><Icon name="calendar" size={18} color="var(--pac-warn)" /> Set a 30-day follow-up</div>
                     <div style={{ fontSize:"0.83rem", color:"var(--pac-text-65)", lineHeight:1.55, marginBottom:14 }}>Come back on <strong style={{ color:"var(--pac-warn)" }}>{dueDateDisplay}</strong> to review progress on this situation. A reminder will appear on your home screen.</div>
                     {followupSaved ? (
                       <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
@@ -1212,7 +1237,7 @@ function App() {
         <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"var(--pac-text-muted)", lineHeight:1.8 }}>
           General guidance only — not legal advice.<br />
           Your progress and company policies save automatically to this browser.<br />
-          © 2025 Melissa A. Weiss. All rights reserved.
+          © 2026 Melissa A. Weiss. All rights reserved.
         </div>
       </div>
     </div>

@@ -5,6 +5,36 @@
  * All PAC custom properties are prefixed --pac-
  */
 
+/* ── Inter (local — no CDN dependency) ──────────────────── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/inter-700.woff2') format('woff2');
+}
+
 :root {
   /* ── Base surface */
   --pac-bg:                  #020617;
@@ -96,7 +126,7 @@
   --pac-risk-text-90:        rgba(253,205,211,0.90);
 
   /* ── Typography */
-  --pac-font:                -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --pac-font:                'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --pac-text-xxs:            0.62rem;
   --pac-text-xs:             0.68rem;
   --pac-text-sm:             0.72rem;
@@ -129,9 +159,9 @@
   --pac-radius-full:         999px;
 
   /* ── Shadows */
-  --pac-shadow-card:         0 2px 12px rgba(0,0,0,0.35);
-  --pac-shadow-raised:       0 4px 20px rgba(0,0,0,0.50);
-  --pac-shadow-accent:       0 0 16px rgba(34,193,255,0.12);
+  --pac-shadow-card:         0 4px 16px rgba(0,0,0,0.40), 0 1px 4px rgba(0,0,0,0.25);
+  --pac-shadow-raised:       0 8px 32px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.30);
+  --pac-shadow-accent:       0 0 20px rgba(34,193,255,0.15), 0 0 6px rgba(34,193,255,0.08);
 
   /* ── Transitions */
   --pac-transition-fast:     all 0.20s;
