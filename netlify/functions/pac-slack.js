@@ -12,10 +12,10 @@
 //   Interactivity Request URL: https://pachr.netlify.app/api/pac-slack
 //   Event Subscriptions URL:   https://pachr.netlify.app/api/pac-slack
 //   Required event: app_home_opened
-//   Required scopes: commands, chat:write, im:write, views:publish, views:open
+//   Required scopes: commands, chat:write, im:write, views:publish, views:open, users:read, users:read.email, files:read
 
 const crypto = require('crypto');
-const { caseStore } = require('./lib/blob-store');
+const dataStore = require('./lib/data-store');
 const { SCENARIO_QUESTIONS } = require('./lib/pac-data');
 const {
   computeScore,
@@ -31,9 +31,29 @@ const {
   hrResolveModal,
   managerFollowupMessage,
   managerReplyModal,
+  hrReassignModal,
+  caseReassignedDmMessage,
   caseListBlocks,
   handoffBlocks,
+  exportModal,
 } = require('./lib/pac-blocks');
+
+const { hrConfigStore } = require('./lib/blob-store');
+const emailNotify = require('./lib/email-notify');
+const { ACTION_IDS: A, CALLBACK_IDS: C, BLOCK_IDS: B, AUDIT_EVENTS: E } = require('./lib/governance');
+
+async function getHrEmail() {
+  const store = hrConfigStore();
+  return (await store.get('hrEmail')) || '';
+}
+
+// Look up a Slack user's email address (requires users:read.email scope)
+async function getSlackUserEmail(userId) {
+  try {
+    const res = await slackApi('users.info', { user: userId });
+    return res.user?.profile?.email || '';
+  } catch { return ''; }
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -51,41 +71,9 @@ const CASE_STATES = {
   CLOSED:            'CLOSED',
 };
 
-// ── Blob helpers ──────────────────────────────────────────────────────────
+// ── Data store helpers (backend selected by PAC_DATA_STORE env var) ──────
 
-function blobKey(managerId, caseId) {
-  return `case/${managerId}/${caseId}`;
-}
-
-async function loadCase(managerId, caseId) {
-  const store = caseStore();
-  const raw = await store.get(blobKey(managerId, caseId));
-  return raw ? JSON.parse(raw) : null;
-}
-
-async function saveCase(rec) {
-  const store = caseStore();
-  await store.set(blobKey(rec.managerId, rec.id), JSON.stringify(rec));
-}
-
-async function findCaseById(caseId) {
-  const store = caseStore();
-  const { blobs } = await store.list({ prefix: 'case/' });
-  for (const blob of blobs) {
-    if (blob.key.endsWith(`/${caseId}`)) {
-      const raw = await store.get(blob.key);
-      return raw ? JSON.parse(raw) : null;
-    }
-  }
-  return null;
-}
-
-async function listCasesForManager(managerId) {
-  const store = caseStore();
-  const { blobs } = await store.list({ prefix: `case/${managerId}/` });
-  const rows = await Promise.all(blobs.map(b => store.get(b.key)));
-  return rows.filter(Boolean).map(raw => JSON.parse(raw));
-}
+const { getCase, saveCase, findCaseById, listCasesForManager, listAllCases } = dataStore;
 
 function auditEntry(event, actor, meta = {}) {
   return { event, actor, timestamp: new Date().toISOString(), ...meta };
@@ -206,19 +194,101 @@ async function handleBlockActions(payload) {
   const channelId = payload.channel && payload.channel.id;
 
   // ── Slash / home actions
-  if (actionId === 'pac_slash_open_intake') {
+  if (actionId === A.SLASH_OPEN_INTAKE) {
     await openModal(triggerId, intakeModal());
     return ack();
   }
 
-  if (actionId === 'pac_slash_list_cases') {
+  if (actionId === A.SLASH_LIST_CASES) {
     const cases = await listCasesForManager(userId);
     cases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     await postMessage(userId, caseListBlocks(cases));
     return ack();
   }
 
-  if (actionId === 'pac_result_open_web') {
+  if (actionId === A.SLASH_EXPORT_CASES) {
+    // Determine if this is an HR user (has HR channel config) or manager
+    const hrEmail = await getHrEmail().catch(() => null);
+    const isHr = !!hrEmail; // rough heuristic — HR user if HR email is configured
+    await openModal(triggerId, exportModal({ isHr }));
+    return ack();
+  }
+
+  if (actionId === A.SLASH_HR_CASES) {
+    const all = await listAllCases();
+    const hrCases = all
+      .filter(c => c.hrNotified)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    if (!hrCases.length) {
+      await postMessage(userId, [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: '*HR Cases*\nNo cases have been submitted to HR yet.' },
+      }]);
+    } else {
+      const blocks = [
+        { type: 'header', text: { type: 'plain_text', text: 'HR Cases' } },
+        { type: 'divider' },
+        ...hrCases.slice(0, 10).flatMap(c => {
+          const risk = r(c.risk || 'good');
+          const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const docs  = (c.attachments || []).length;
+          const docNote = docs > 0 ? `  ·  📎 ${docs} doc${docs > 1 ? 's' : ''}` : '';
+          return [{
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `${risk.emoji}  *${c.scenario}*  ·  <@${c.managerId}>\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`${docNote}`,
+            },
+            accessory: {
+              type: 'overflow',
+              action_id: A.HR_CASE_ROW_OVERFLOW,
+              options: [
+                { text: { type: 'plain_text', text: 'Filter by this manager' }, value: `${A.CASE_ROW_FILTER_MGR}::${c.managerId}` },
+                { text: { type: 'plain_text', text: 'Open case thread'       }, value: `open_case::${c.id}` },
+              ],
+            },
+          }];
+        }),
+        ...(hrCases.length > 10 ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: `+${hrCases.length - 10} more — open the web app to see all.` }] }] : []),
+      ];
+      await postMessage(userId, blocks);
+    }
+    return ack();
+  }
+
+  if (actionId === A.HR_CASE_ROW_OVERFLOW) {
+    const [action, value] = (action?.selected_option?.value || '').split('::');
+    if (action === A.CASE_ROW_FILTER_MGR && value) {
+      const all = await listAllCases();
+      const mgrCases = all
+        .filter(c => c.managerId === value && c.hrNotified)
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+      const label = mgrCases.length ? `Cases from <@${value}>` : `No HR cases from <@${value}>`;
+      const rows = mgrCases.map(c => {
+        const risk = r(c.risk || 'good');
+        const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return { type: 'section', text: { type: 'mrkdwn', text: `${risk.emoji}  *${c.scenario}*  ·  ${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`` } };
+      });
+      await postMessage(userId, [
+        { type: 'header', text: { type: 'plain_text', text: label } },
+        { type: 'divider' },
+        ...rows,
+      ]);
+    }
+    if (action === 'open_case' && value) {
+      const rec = await findCaseById(value);
+      if (rec?.hrChannelId && rec?.hrChannelTs) {
+        const link = `https://slack.com/archives/${rec.hrChannelId}/p${rec.hrChannelTs.replace('.', '')}`;
+        await postEphemeral(channelId || userId, userId, [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `Open the HR thread for case \`${value}\`:\n${link}` },
+        }]);
+      }
+    }
+    return ack();
+  }
+
+  if (actionId === A.RESULT_OPEN_WEB) {
     const caseId = action.value;
     const url = `${WEB_APP_URL}${caseId ? `?caseId=${encodeURIComponent(caseId)}` : ''}`;
     await postEphemeral(channelId || userId, userId, [{
@@ -229,16 +299,49 @@ async function handleBlockActions(payload) {
   }
 
   // ── Notify HR
-  if (actionId === 'pac_result_notify_hr') {
+  if (actionId === A.RESULT_NOTIFY_HR) {
     return handleNotifyHr(action.value, userId, channelId);
   }
 
+  // ── Upload documentation (opens modal with file_input)
+  if (actionId === A.RESULT_UPLOAD_DOC) {
+    const caseId = action.value;
+    await openModal(payload.trigger_id, {
+      type: 'modal',
+      callback_id: C.MODAL_UPLOAD_DOC,
+      title: { type: 'plain_text', text: 'Upload Documentation' },
+      submit: { type: 'plain_text', text: 'Attach to Case' },
+      close:  { type: 'plain_text', text: 'Cancel' },
+      private_metadata: JSON.stringify({ caseId }),
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Attach files to case \`${caseId}\`*\nPIPs, write-ups, disciplinary records, or any supporting documentation. HR will be able to see these files.` },
+        },
+        { type: 'divider' },
+        {
+          type: 'input',
+          block_id: B.DOC_UPLOAD,
+          label: { type: 'plain_text', text: 'Files' },
+          hint: { type: 'plain_text', text: 'PDF, DOCX, PNG, JPG — up to 5 files.' },
+          element: {
+            type: 'file_input',
+            action_id: A.DOC_FILES,
+            filetypes: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'],
+            max_files: 5,
+          },
+        },
+      ],
+    });
+    return ack();
+  }
+
   // ── Overflow menu from HR triage — value format: "pac_hr_<action>::<caseId>"
-  if (actionId === 'pac_hr_overflow') {
+  if (actionId === A.HR_OVERFLOW) {
     const [overflowAction, caseId] = (action.selected_option?.value || '').split('::');
     if (!overflowAction || !caseId) return ack();
 
-    if (overflowAction === 'pac_hr_open_web') {
+    if (overflowAction === A.HR_OPEN_WEB) {
       const url = `${WEB_APP_URL}?caseId=${encodeURIComponent(caseId)}`;
       await postEphemeral(channelId || userId, userId, [{
         type: 'section',
@@ -246,40 +349,46 @@ async function handleBlockActions(payload) {
       }]);
       return ack();
     }
-    if (overflowAction === 'pac_hr_claim') return handleHrClaim(caseId, userId);
-    if (overflowAction === 'pac_hr_ask_followup') {
+    if (overflowAction === A.HR_CLAIM) return handleHrClaim(caseId, userId);
+    if (overflowAction === A.HR_ASK_FOLLOWUP) {
       await openModal(triggerId, hrReplyModal(caseId, 'Ask Manager a Follow-up'));
       return ack();
     }
-    if (overflowAction === 'pac_hr_request_info') {
+    if (overflowAction === A.HR_REQUEST_INFO) {
       await openModal(triggerId, hrReplyModal(caseId, 'Request More Information'));
       return ack();
     }
-    if (overflowAction === 'pac_hr_escalate') return handleHrTransition(caseId, userId, CASE_STATES.ESCALATED, 'HR_ESCALATED');
-    if (overflowAction === 'pac_hr_close')    return handleHrTransition(caseId, userId, CASE_STATES.CLOSED,    'HR_CLOSED');
+    if (overflowAction === A.HR_ESCALATE) return handleHrTransition(caseId, userId, CASE_STATES.ESCALATED, E.HR_ESCALATED);
+    if (overflowAction === A.HR_CLOSE)    return handleHrTransition(caseId, userId, CASE_STATES.CLOSED,    E.HR_CLOSED);
+    if (overflowAction === A.HR_REASSIGN) {
+      const rec = await findCaseById(caseId);
+      if (!rec) return ack();
+      await openModal(payload.trigger_id, hrReassignModal(caseId, rec.scenario, rec.managerId));
+      return ack();
+    }
     return ack();
   }
 
   // ── HR triage direct button actions
-  if (actionId === 'pac_hr_acknowledge') return handleHrTransition(action.value, userId, CASE_STATES.ACKNOWLEDGED, 'HR_ACKNOWLEDGED');
-  if (actionId === 'pac_hr_claim')       return handleHrClaim(action.value, userId);
-  if (actionId === 'pac_hr_mark_review') return handleHrTransition(action.value, userId, CASE_STATES.UNDER_REVIEW, 'HR_MARKED_REVIEW');
-  if (actionId === 'pac_hr_escalate')    return handleHrTransition(action.value, userId, CASE_STATES.ESCALATED,    'HR_ESCALATED');
-  if (actionId === 'pac_hr_close')       return handleHrTransition(action.value, userId, CASE_STATES.CLOSED,       'HR_CLOSED');
+  if (actionId === A.HR_ACKNOWLEDGE) return handleHrTransition(action.value, userId, CASE_STATES.ACKNOWLEDGED, E.HR_ACKNOWLEDGED);
+  if (actionId === A.HR_CLAIM)       return handleHrClaim(action.value, userId);
+  if (actionId === A.HR_MARK_REVIEW) return handleHrTransition(action.value, userId, CASE_STATES.UNDER_REVIEW, E.HR_MARKED_REVIEW);
+  if (actionId === A.HR_ESCALATE)    return handleHrTransition(action.value, userId, CASE_STATES.ESCALATED,    E.HR_ESCALATED);
+  if (actionId === A.HR_CLOSE)       return handleHrTransition(action.value, userId, CASE_STATES.CLOSED,       E.HR_CLOSED);
 
-  if (actionId === 'pac_hr_ask_followup') {
+  if (actionId === A.HR_ASK_FOLLOWUP) {
     await openModal(triggerId, hrReplyModal(action.value, 'Ask Manager a Follow-up'));
     return ack();
   }
-  if (actionId === 'pac_hr_request_info') {
+  if (actionId === A.HR_REQUEST_INFO) {
     await openModal(triggerId, hrReplyModal(action.value, 'Request More Information'));
     return ack();
   }
-  if (actionId === 'pac_hr_resolve') {
+  if (actionId === A.HR_RESOLVE) {
     await openModal(triggerId, hrResolveModal(action.value));
     return ack();
   }
-  if (actionId === 'pac_hr_open_web') {
+  if (actionId === A.HR_OPEN_WEB) {
     const url = `${WEB_APP_URL}?caseId=${encodeURIComponent(action.value)}`;
     await postEphemeral(channelId || userId, userId, [{
       type: 'section', text: { type: 'mrkdwn', text: `Open the web app for full case details:\n${url}` },
@@ -288,7 +397,7 @@ async function handleBlockActions(payload) {
   }
 
   // ── Manager reply
-  if (actionId === 'pac_mgr_reply') {
+  if (actionId === A.MGR_REPLY) {
     let caseId, scenario;
     try { ({ caseId, scenario } = JSON.parse(action.value)); } catch { caseId = action.value; scenario = ''; }
     await openModal(triggerId, managerReplyModal(caseId, scenario));
@@ -329,9 +438,21 @@ async function handleNotifyHr(caseId, userId, channelId) {
     hrChannelId,
     hrChannelTs: msg.ts,
     hrNotified: true,
-    auditLog: [...(rec.auditLog || []), auditEntry('HR_NOTIFIED', userId, { hrChannelId, ts: msg.ts })],
+    auditLog: [...(rec.auditLog || []), auditEntry(E.HR_NOTIFIED, userId, { hrChannelId, ts: msg.ts })],
   };
   await saveCase(updated);
+
+  // If manager uploaded docs before notifying HR, share them to the HR thread now
+  // Using file_ids so files appear inline and HR members can access them directly
+  const priorAttachments = rec.attachments || [];
+  if (priorAttachments.length > 0) {
+    await postMessage(
+      hrChannelId,
+      [{ type: 'section', text: { type: 'mrkdwn', text: `📎  <@${userId}> attached ${priorAttachments.length} file${priorAttachments.length > 1 ? 's' : ''} before notifying HR` } }],
+      'Prior documentation',
+      { thread_ts: msg.ts, file_ids: priorAttachments.map(f => f.id) }
+    );
+  }
 
   // Update manager's result DM to show HR was notified
   if (rec.dmTs && rec.dmChannelId) {
@@ -340,6 +461,15 @@ async function handleNotifyHr(caseId, userId, channelId) {
       resultDmMessage({ scenario: rec.scenario, level: rec.risk, caseId: rec.id, hrNotified: true })
     );
   }
+
+  // Email HR with case details + any pre-existing attachments (fire-and-forget)
+  getHrEmail().then(hrEmail =>
+    emailNotify.notifyHrOfCase({
+      hrEmail, scenario: rec.scenario, level: rec.risk,
+      caseId: rec.id, managerSlackId: userId,
+      fileRefs: rec.attachments || [],
+    })
+  ).catch(() => {});
 
   return ack();
 }
@@ -402,7 +532,7 @@ async function handleHrClaim(caseId, hrUserId) {
     state: CASE_STATES.ACKNOWLEDGED,
     claimedBy: hrUserId,
     updatedAt: now,
-    auditLog: [...(rec.auditLog || []), auditEntry('HR_CLAIMED', hrUserId, { via: 'slack' })],
+    auditLog: [...(rec.auditLog || []), auditEntry(E.HR_CLAIMED, hrUserId, { via: 'slack' })],
   };
   await saveCase(updated);
 
@@ -428,48 +558,55 @@ async function handleViewSubmission(payload) {
   const values     = payload.view?.state?.values;
 
   // pac_modal_intake → push questions modal
-  if (callbackId === 'pac_modal_intake') {
-    const scenario = values?.pac_block_scenario?.pac_intake_scenario_select?.selected_option?.value;
-    const refName  = values?.pac_block_ref_name?.pac_intake_ref_name?.value || '';
+  if (callbackId === C.MODAL_INTAKE) {
+    const selectedOptions = values?.[B.SCENARIO]?.[A.INTAKE_SCENARIO]?.selected_options || [];
+    const scenarios = selectedOptions.map(o => o.value);
+    const scenario  = scenarios[0]; // primary — drives questions and scoring
+    const refName   = values?.[B.REF_NAME]?.[A.INTAKE_REF_NAME]?.value || '';
     if (!scenario) {
-      return ack({ response_action: 'errors', errors: { pac_block_scenario: 'Please select a scenario.' } });
+      return ack({ response_action: 'errors', errors: { [B.SCENARIO]: 'Please select at least one scenario.' } });
     }
     const caseId = newCaseId();
-    const meta   = JSON.stringify({ caseId, scenario, refName, managerId: userId });
+    const meta   = JSON.stringify({ caseId, scenario, scenarios, refName, managerId: userId });
     return ack({ response_action: 'push', view: questionsModal(scenario, SCENARIO_QUESTIONS[scenario] || [], meta) });
   }
 
   // pac_modal_questions → score, save, DM manager
-  if (callbackId === 'pac_modal_questions') {
+  if (callbackId === C.MODAL_QUESTIONS) {
     let meta = {};
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
-    const { caseId, scenario, refName } = meta;
+    const { caseId, scenario, scenarios = [scenario], refName } = meta;
     const questions = SCENARIO_QUESTIONS[scenario] || [];
 
     const answers = questions.map((_, i) =>
-      values?.[`pac_block_q_${i}`]?.[`pac_q_answer_${i}`]?.selected_option?.value || 'unknown'
+      values?.[`${B.Q_PREFIX}${i}`]?.[`${A.Q_ANSWER_PREFIX}${i}`]?.selected_option?.value || 'unknown'
     );
 
     const { level } = computeScore(questions, answers);
     const now = new Date().toISOString();
 
     const caseRecord = {
-      id: caseId, scenario, refName,
+      id: caseId, scenario, scenarios, refName,
       managerId: userId, source: 'slack',
       state: CASE_STATES.IN_PROGRESS_SLACK,
       risk: level, answers,
       createdAt: now, updatedAt: now,
       followupCount: 0, hrNotified: false,
-      auditLog: [auditEntry('CASE_CREATED', userId, { scenario, level, source: 'slack' })],
+      auditLog: [auditEntry(E.CASE_CREATED, userId, { scenario, scenarios, level, source: 'slack' })],
     };
     await saveCase(caseRecord);
 
-    const dmMsg = resultDmMessage({ scenario, level, caseId, hrNotified: false });
+    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: false, refName: refName || '' });
     const dm    = await postMessage(userId, dmMsg);
 
     if (dm.ok) {
       await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
     }
+
+    // Email manager their result (fire-and-forget)
+    getSlackUserEmail(userId).then(email =>
+      emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
+    ).catch(() => {});
 
     // Auto-handoff ephemeral for High Risk
     if (level === 'risk') {
@@ -483,11 +620,11 @@ async function handleViewSubmission(payload) {
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread
-  if (callbackId === 'pac_modal_hr_reply') {
+  if (callbackId === C.MODAL_HR_REPLY) {
     let meta = {};
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
     const { caseId } = meta;
-    const message = values?.pac_block_hr_message?.pac_hr_message_input?.value || '';
+    const message = values?.[B.HR_MESSAGE]?.[A.HR_MESSAGE_INPUT]?.value || '';
 
     const rec = await findCaseById(caseId);
     if (!rec) return ack('');
@@ -497,7 +634,7 @@ async function handleViewSubmission(payload) {
       ...rec,
       followupCount: (rec.followupCount || 0) + 1,
       updatedAt: now,
-      auditLog: [...(rec.auditLog || []), auditEntry('HR_ASKED_FOLLOWUP', userId, { message: message.slice(0, 200), via: 'slack' })],
+      auditLog: [...(rec.auditLog || []), auditEntry(E.HR_ASKED_FOLLOWUP, userId, { message: message.slice(0, 200), via: 'slack' })],
     };
     await saveCase(updated);
 
@@ -506,6 +643,11 @@ async function handleViewSubmission(payload) {
       rec.managerId,
       managerFollowupMessage({ caseId, scenario: rec.scenario, hrMessage: message, hrSlackId: userId, level: rec.risk })
     );
+
+    // Email manager (fire-and-forget)
+    getSlackUserEmail(rec.managerId).then(managerEmail =>
+      emailNotify.notifyManagerOfHrReply({ managerEmail, caseId, scenario: rec.scenario, message })
+    ).catch(() => {});
 
     // Thread post to HR channel
     if (rec.hrChannelId && rec.hrChannelTs) {
@@ -529,11 +671,11 @@ async function handleViewSubmission(payload) {
   }
 
   // pac_modal_hr_resolve → close case with resolution note
-  if (callbackId === 'pac_modal_hr_resolve') {
+  if (callbackId === C.MODAL_HR_RESOLVE) {
     let meta = {};
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
     const { caseId } = meta;
-    const note = values?.pac_block_hr_resolution?.pac_hr_resolution_input?.value || '';
+    const note = values?.[B.HR_RESOLUTION]?.[A.HR_RESOLUTION_INPUT]?.value || '';
 
     const rec = await findCaseById(caseId);
     if (!rec) return ack('');
@@ -544,7 +686,7 @@ async function handleViewSubmission(payload) {
       state: CASE_STATES.CLOSED,
       resolutionNote: note,
       updatedAt: now,
-      auditLog: [...(rec.auditLog || []), auditEntry('HR_RESOLVED', userId, { note: note.slice(0, 200), via: 'slack' })],
+      auditLog: [...(rec.auditLog || []), auditEntry(E.HR_RESOLVED, userId, { note: note.slice(0, 200), via: 'slack' })],
     };
     await saveCase(updated);
 
@@ -576,11 +718,11 @@ async function handleViewSubmission(payload) {
   }
 
   // pac_modal_mgr_reply → post to HR thread + confirm to manager
-  if (callbackId === 'pac_modal_mgr_reply') {
+  if (callbackId === C.MODAL_MGR_REPLY) {
     let meta = {};
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
     const { caseId, scenario } = meta;
-    const reply = values?.pac_block_mgr_reply?.pac_mgr_reply_input?.value || '';
+    const reply = values?.[B.MGR_REPLY]?.[A.MGR_REPLY_INPUT]?.value || '';
 
     const rec = await findCaseById(caseId);
     if (!rec) return ack('');
@@ -589,7 +731,7 @@ async function handleViewSubmission(payload) {
     await saveCase({
       ...rec,
       updatedAt: now,
-      auditLog: [...(rec.auditLog || []), auditEntry('MGR_REPLIED', userId, { reply: reply.slice(0, 200), via: 'slack' })],
+      auditLog: [...(rec.auditLog || []), auditEntry(E.MGR_REPLIED, userId, { reply: reply.slice(0, 200), via: 'slack' })],
     });
 
     if (rec.hrChannelId && rec.hrChannelTs) {
@@ -606,6 +748,170 @@ async function handleViewSubmission(payload) {
       text: { type: 'mrkdwn', text: `✅  Your reply on case \`${caseId}\` has been sent to HR.` },
     }]);
 
+    // Email HR with manager's reply (fire-and-forget)
+    getHrEmail().then(hrEmail =>
+      emailNotify.notifyHrOfManagerReply({ hrEmail, caseId, scenario: rec.scenario, message: reply })
+    ).catch(() => {});
+
+    return ack('');
+  }
+
+  // pac_modal_upload_doc → store file references + notify HR thread
+  if (callbackId === C.MODAL_UPLOAD_DOC) {
+    let meta = {};
+    try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
+    const { caseId } = meta;
+
+    // Slack sends uploaded files as an array of file objects on the view
+    const uploadedFiles = payload.view?.state?.values?.[B.DOC_UPLOAD]?.[A.DOC_FILES]?.files || [];
+
+    const rec = await findCaseById(caseId);
+    if (!rec) return ack('');
+
+    const now = new Date().toISOString();
+    const fileRefs = uploadedFiles.map(f => ({
+      id:       f.id,
+      name:     f.name,
+      mimetype: f.mimetype,
+      url:      f.permalink,
+      uploadedAt: now,
+      uploadedBy: userId,
+    }));
+
+    await saveCase({
+      ...rec,
+      updatedAt: now,
+      attachments: [...(rec.attachments || []), ...fileRefs],
+      auditLog: [...(rec.auditLog || []), auditEntry(E.DOCS_UPLOADED, userId, { count: fileRefs.length, files: fileRefs.map(f => f.name) })],
+    });
+
+    // Share files directly to HR thread so they appear inline and are accessible to all channel members
+    if (rec.hrChannelId && rec.hrChannelTs && fileRefs.length > 0) {
+      await postMessage(
+        rec.hrChannelId,
+        [{ type: 'section', text: { type: 'mrkdwn', text: `📎  <@${userId}> attached ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} to case \`${caseId}\`` } }],
+        'Documents uploaded',
+        { thread_ts: rec.hrChannelTs, file_ids: fileRefs.map(f => f.id) }
+      );
+    }
+
+    // Confirm to manager
+    const confirmText = fileRefs.length > 0
+      ? `✅  ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} attached to case \`${caseId}\`.${rec.hrChannelId ? ' HR has been notified.' : ''}`
+      : `No files were attached to case \`${caseId}\`.`;
+
+    await postMessage(userId, [{ type: 'section', text: { type: 'mrkdwn', text: confirmText } }]);
+
+    // Email both parties with uploaded docs as attachments (fire-and-forget)
+    if (fileRefs.length > 0) {
+      Promise.all([getSlackUserEmail(userId), getHrEmail()]).then(([managerEmail, hrEmail]) =>
+        emailNotify.notifyDocumentUploaded({
+          managerEmail, hrEmail,
+          caseId, scenario: rec.scenario, fileRefs, uploaderLabel: 'Manager',
+        })
+      ).catch(() => {});
+    }
+
+    return ack('');
+  }
+
+  // pac_modal_hr_reassign → update managerId, DM new manager, notify HR thread
+  if (callbackId === C.MODAL_HR_REASSIGN) {
+    let meta = {};
+    try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
+    const { caseId, previousManagerId } = meta;
+    const newManagerId = values?.[B.NEW_MANAGER]?.[A.REASSIGN_MANAGER_SELECT]?.selected_user;
+    const note = values?.[B.REASSIGN_NOTE]?.[A.REASSIGN_NOTE_INPUT]?.value || '';
+
+    if (!newManagerId) return ack('');
+
+    const rec = await findCaseById(caseId);
+    if (!rec) return ack('');
+
+    const now = new Date().toISOString();
+    const updated = {
+      ...rec,
+      managerId: newManagerId,
+      updatedAt: now,
+      auditLog: [...(rec.auditLog || []), auditEntry(E.CASE_REASSIGNED, userId, {
+        previousManagerId, newManagerId, note: note.slice(0, 200),
+      })],
+    };
+    await saveCase(updated);
+
+    // DM new manager with full case summary
+    await postMessage(newManagerId, caseReassignedDmMessage({
+      caseId, scenario: rec.scenario, level: rec.risk,
+      state: rec.state, previousManagerId, hrNote: note,
+    }));
+
+    // Notify HR thread of reassignment
+    if (rec.hrChannelId && rec.hrChannelTs) {
+      await postMessage(
+        rec.hrChannelId,
+        [{ type: 'section', text: { type: 'mrkdwn', text: `🔄  Case \`${caseId}\` reassigned from <@${previousManagerId}> to <@${newManagerId}> by <@${userId}>.${note ? `\n_${note}_` : ''}` } }],
+        'Case reassigned',
+        { thread_ts: rec.hrChannelTs }
+      );
+    }
+
+    return ack('');
+  }
+
+  // pac_modal_export_cases → generate download link or email the file
+  if (callbackId === C.MODAL_EXPORT_CASES) {
+    const isHr   = payload.view.private_metadata === 'hr';
+    const format  = values?.[B.EXPORT_FORMAT]?.[A.EXPORT_FORMAT]?.selected_option?.value || 'csv';
+    const filter  = isHr ? (values?.[B.EXPORT_FILTER]?.[A.EXPORT_FILTER]?.selected_option?.value || 'all') : 'manager';
+    const delivery = values?.[B.EXPORT_DELIVERY]?.[A.EXPORT_DELIVERY]?.selected_option?.value || 'link';
+    const emailInput = values?.[B.EXPORT_EMAIL]?.[A.EXPORT_EMAIL]?.value?.trim() || '';
+
+    const token  = process.env.PAC_ADMIN_TOKEN;
+    const filterParam = filter === 'all' ? '' : `&filter=${filter}`;
+    const base   = `${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`;
+
+    const FORMAT_LABELS = {
+      csv: 'CSV (Excel / Google Sheets)',
+      word: 'Word doc (.doc)',
+      tsv: 'TSV (Excel tab-separated)',
+      json: 'JSON',
+    };
+
+    if (delivery === 'link') {
+      await postMessage(userId, [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Your export is ready*\n<${base}|Download ${FORMAT_LABELS[format]}>\n\nFor SharePoint, you can also email this to your document library address.` },
+      }]);
+      return ack('');
+    }
+
+    // Email delivery
+    let toEmail = emailInput;
+    if (delivery === 'email_self') {
+      const hrEmail = await getHrEmail().catch(() => null);
+      toEmail = hrEmail || emailInput;
+    }
+    if (!toEmail) {
+      return ack({ response_action: 'errors', errors: { [B.EXPORT_EMAIL]: 'Enter an email address to send the export to.' } });
+    }
+
+    try {
+      const res = await fetch(`${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: toEmail }),
+      });
+      if (!res.ok) throw new Error(`Export API ${res.status}`);
+      await postMessage(userId, [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Export sent*\nA ${FORMAT_LABELS[format]} file was emailed to \`${toEmail}\`.` },
+      }]);
+    } catch (e) {
+      await postMessage(userId, [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `Export failed: ${e.message}. Try the download link instead: <${base}|${FORMAT_LABELS[format]}>` },
+      }]);
+    }
     return ack('');
   }
 

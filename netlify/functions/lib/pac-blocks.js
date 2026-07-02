@@ -14,6 +14,7 @@
 //   APP_HOME          — manager's own context only
 
 const { SCENARIO_NAMES, NEXT_STEPS } = require('./pac-data');
+const { ACTION_IDS: A, BLOCK_IDS: B, CALLBACK_IDS: C } = require('./governance');
 
 // ── Risk system ──────────────────────────────────────────────────────────
 
@@ -81,17 +82,27 @@ function slashResponseBlocks() {
           type: 'button',
           text: { type: 'plain_text', text: 'Start New Check', emoji: true },
           style: 'primary',
-          action_id: 'pac_slash_open_intake',
+          action_id: A.SLASH_OPEN_INTAKE,
         },
         {
           type: 'button',
           text: { type: 'plain_text', text: 'My Cases',  emoji: true },
-          action_id: 'pac_slash_list_cases',
+          action_id: A.SLASH_LIST_CASES,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'HR Cases', emoji: true },
+          action_id: A.SLASH_HR_CASES,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Export', emoji: true },
+          action_id: A.SLASH_EXPORT_CASES,
         },
         {
           type: 'button',
           text: { type: 'plain_text', text: 'Open Web App', emoji: true },
-          action_id: 'pac_result_open_web',
+          action_id: A.RESULT_OPEN_WEB,
           value: '',
         },
       ],
@@ -104,7 +115,7 @@ function slashResponseBlocks() {
 function intakeModal() {
   return {
     type: 'modal',
-    callback_id: 'pac_modal_intake',
+    callback_id: C.MODAL_INTAKE,
     title: { type: 'plain_text', text: 'People Action Check' },
     submit: { type: 'plain_text', text: 'Continue' },
     close:  { type: 'plain_text', text: 'Cancel' },
@@ -119,12 +130,13 @@ function intakeModal() {
       { type: 'divider' },
       {
         type: 'input',
-        block_id: 'pac_block_scenario',
-        label: { type: 'plain_text', text: 'Scenario' },
+        block_id: B.SCENARIO,
+        label: { type: 'plain_text', text: 'Scenario(s)' },
+        hint: { type: 'plain_text', text: 'Select all that apply. Questions will be drawn from the primary (first) scenario selected.' },
         element: {
-          type: 'static_select',
-          action_id: 'pac_intake_scenario_select',
-          placeholder: { type: 'plain_text', text: 'Choose a scenario…' },
+          type: 'multi_static_select',
+          action_id: A.INTAKE_SCENARIO,
+          placeholder: { type: 'plain_text', text: 'Choose one or more scenarios…' },
           options: SCENARIO_NAMES.map(s => ({
             text: { type: 'plain_text', text: s },
             value: s,
@@ -133,13 +145,13 @@ function intakeModal() {
       },
       {
         type: 'input',
-        block_id: 'pac_block_ref_name',
+        block_id: B.REF_NAME,
         optional: true,
         label: { type: 'plain_text', text: 'Internal reference (optional)' },
         hint: { type: 'plain_text', text: 'For your reference only — not shared with HR in Slack.' },
         element: {
           type: 'plain_text_input',
-          action_id: 'pac_intake_ref_name',
+          action_id: A.INTAKE_REF_NAME,
           placeholder: { type: 'plain_text', text: 'e.g. initials, ticket #, case code…' },
           max_length: 80,
         },
@@ -170,12 +182,12 @@ function questionsModal(scenario, questions, privateMetadata) {
   questions.forEach((q, i) => {
     blocks.push({
       type: 'input',
-      block_id: `pac_block_q_${i}`,
+      block_id: `${B.Q_PREFIX}${i}`,
       label: { type: 'plain_text', text: `${i + 1}. ${q.q}${q.critical ? '  ⚠️' : ''}` },
       ...(q.hint ? { hint: { type: 'plain_text', text: q.hint } } : {}),
       element: {
         type: 'radio_buttons',
-        action_id: `pac_q_answer_${i}`,
+        action_id: `${A.Q_ANSWER_PREFIX}${i}`,
         options: [
           { text: { type: 'plain_text', text: 'Yes'       }, value: 'yes'     },
           { text: { type: 'plain_text', text: 'No'        }, value: 'no'      },
@@ -187,7 +199,7 @@ function questionsModal(scenario, questions, privateMetadata) {
 
   return {
     type: 'modal',
-    callback_id: 'pac_modal_questions',
+    callback_id: C.MODAL_QUESTIONS,
     title: { type: 'plain_text', text: 'Risk Assessment' },
     submit: { type: 'plain_text', text: 'See Result' },
     close:  { type: 'plain_text', text: 'Back' },
@@ -201,10 +213,18 @@ function questionsModal(scenario, questions, privateMetadata) {
 // Uses colored left border to signal risk level visually.
 // Includes next steps so the DM is immediately actionable.
 
-function resultDmMessage({ scenario, level, caseId, hrNotified = false, followupCount = 0 }) {
+function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNotified = false, followupCount = 0, refName = '' }) {
+  const selfCheck = !refName;
   const risk = r(level);
   const steps = NEXT_STEPS[scenario] || {};
   const stepList = steps[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
+  const scenarioDisplay = scenarios.length > 1
+    ? `${scenario}\n_+ ${scenarios.slice(1).join(', ')}_`
+    : scenario;
+
+  const statusField = selfCheck
+    ? '🔒  Self-check — HR not notified'
+    : hrNotified ? '📬  HR Notified' : '⏳  Pending notification';
 
   const blocks = [
     // ── Identity header
@@ -212,7 +232,7 @@ function resultDmMessage({ scenario, level, caseId, hrNotified = false, followup
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*People Action Check  ·  Result*`,
+        text: selfCheck ? `*People Action Check  ·  Risk Self-Check*` : `*People Action Check  ·  Result*`,
       },
     },
     { type: 'divider' },
@@ -220,10 +240,10 @@ function resultDmMessage({ scenario, level, caseId, hrNotified = false, followup
     {
       type: 'section',
       fields: [
-        { type: 'mrkdwn', text: `*Scenario*\n${scenario}` },
+        { type: 'mrkdwn', text: `*Scenario*\n${scenarioDisplay}` },
         { type: 'mrkdwn', text: `*Risk Level*\n${risk.emoji}  ${risk.label}` },
         { type: 'mrkdwn', text: `*Case ID*\n\`${caseId}\`` },
-        { type: 'mrkdwn', text: `*Status*\n${hrNotified ? '📬  HR Notified' : '⏳  Pending notification'}` },
+        { type: 'mrkdwn', text: `*Status*\n${statusField}` },
       ],
     },
     { type: 'divider' },
@@ -255,10 +275,44 @@ function resultDmMessage({ scenario, level, caseId, hrNotified = false, followup
   blocks.push({ type: 'divider' });
 
   // ── Actions
-  if (hrNotified) {
+  if (selfCheck) {
+    // No employee name → self-check only, HR never notified
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: '🔒  This check is saved to your history only. HR has not been notified and cannot be notified without an employee reference.' }],
+    });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+          action_id: A.RESULT_OPEN_WEB,
+          value: caseId,
+        },
+      ],
+    });
+  } else if (hrNotified) {
     blocks.push({
       type: 'context',
       elements: [{ type: 'mrkdwn', text: '✅  HR has been notified and will follow up in Slack.' }],
+    });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Upload Documentation', emoji: true },
+          action_id: A.RESULT_UPLOAD_DOC,
+          value: caseId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+          action_id: A.RESULT_OPEN_WEB,
+          value: caseId,
+        },
+      ],
     });
   } else {
     blocks.push({
@@ -268,13 +322,19 @@ function resultDmMessage({ scenario, level, caseId, hrNotified = false, followup
           type: 'button',
           text: { type: 'plain_text', text: 'Notify HR', emoji: true },
           style: level === 'risk' ? 'danger' : 'primary',
-          action_id: 'pac_result_notify_hr',
+          action_id: A.RESULT_NOTIFY_HR,
+          value: caseId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Upload Documentation', emoji: true },
+          action_id: A.RESULT_UPLOAD_DOC,
           value: caseId,
         },
         {
           type: 'button',
           text: { type: 'plain_text', text: 'Open Web App', emoji: true },
-          action_id: 'pac_result_open_web',
+          action_id: A.RESULT_OPEN_WEB,
           value: caseId,
         },
       ],
@@ -293,7 +353,7 @@ function resultDmMessage({ scenario, level, caseId, hrNotified = false, followup
         type: 'button',
         text: { type: 'plain_text', text: 'Open Web App', emoji: true },
         style: 'primary',
-        action_id: 'pac_result_open_web',
+        action_id: A.RESULT_OPEN_WEB,
         value: caseId,
       },
     });
@@ -357,7 +417,7 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
   // ── Actions — primary button + overflow for secondary actions + web link
   const actionElements = buildHrActions(state, caseId);
   if (actionElements.length > 0) {
-    blocks.push({ type: 'actions', block_id: 'pac_block_hr_actions', elements: actionElements });
+    blocks.push({ type: 'actions', block_id: B.HR_ACTIONS, elements: actionElements });
   }
 
   return {
@@ -370,56 +430,62 @@ function buildHrActions(state, caseId) {
   const webBtn = {
     type: 'button',
     text: { type: 'plain_text', text: 'Web App', emoji: true },
-    action_id: 'pac_hr_open_web',
+    action_id: A.HR_OPEN_WEB,
     value: caseId,
   };
+
+  const reassignOpt = { text: { type: 'plain_text', text: '🔄  Reassign to another manager' }, value: `${A.HR_REASSIGN}::${caseId}` };
 
   // Overflow options available at each state
   const overflowOptionsByState = {
     SUBMITTED: [
-      { text: { type: 'plain_text', text: '📋  Claim this case' }, value: `pac_hr_claim::${caseId}` },
-      { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `pac_hr_open_web::${caseId}` },
+      { text: { type: 'plain_text', text: '📋  Claim this case' }, value: `${A.HR_CLAIM}::${caseId}` },
+      reassignOpt,
+      { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
     ACKNOWLEDGED: [
-      { text: { type: 'plain_text', text: '💬  Ask manager a follow-up' },  value: `pac_hr_ask_followup::${caseId}` },
-      { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `pac_hr_request_info::${caseId}` },
-      { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `pac_hr_escalate::${caseId}` },
-      { text: { type: 'plain_text', text: '✅  Close case' },                value: `pac_hr_close::${caseId}` },
-      { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `pac_hr_open_web::${caseId}` },
+      { text: { type: 'plain_text', text: '💬  Ask manager a follow-up' },  value: `${A.HR_ASK_FOLLOWUP}::${caseId}` },
+      { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `${A.HR_REQUEST_INFO}::${caseId}` },
+      { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `${A.HR_ESCALATE}::${caseId}` },
+      reassignOpt,
+      { text: { type: 'plain_text', text: '✅  Close case' },                value: `${A.HR_CLOSE}::${caseId}` },
+      { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
     UNDER_REVIEW: [
-      { text: { type: 'plain_text', text: '💬  Ask manager a follow-up' },  value: `pac_hr_ask_followup::${caseId}` },
-      { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `pac_hr_request_info::${caseId}` },
-      { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `pac_hr_escalate::${caseId}` },
-      { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `pac_hr_open_web::${caseId}` },
+      { text: { type: 'plain_text', text: '💬  Ask manager a follow-up' },  value: `${A.HR_ASK_FOLLOWUP}::${caseId}` },
+      { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `${A.HR_REQUEST_INFO}::${caseId}` },
+      { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `${A.HR_ESCALATE}::${caseId}` },
+      reassignOpt,
+      { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
     ESCALATED: [
-      { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `pac_hr_open_web::${caseId}` },
+      reassignOpt,
+      { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
   };
 
   if (state === 'SUBMITTED') {
     return [
-      { type: 'button', text: { type: 'plain_text', text: 'Acknowledge' }, style: 'primary', action_id: 'pac_hr_acknowledge', value: caseId },
-      { type: 'overflow', action_id: 'pac_hr_overflow', options: overflowOptionsByState.SUBMITTED },
+      { type: 'button', text: { type: 'plain_text', text: 'Acknowledge' }, style: 'primary', action_id: A.HR_ACKNOWLEDGE, value: caseId },
+      { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.SUBMITTED },
     ];
   }
   if (state === 'ACKNOWLEDGED') {
     return [
-      { type: 'button', text: { type: 'plain_text', text: 'Mark In Review' }, style: 'primary', action_id: 'pac_hr_mark_review', value: caseId },
-      { type: 'overflow', action_id: 'pac_hr_overflow', options: overflowOptionsByState.ACKNOWLEDGED },
+      { type: 'button', text: { type: 'plain_text', text: 'Mark In Review' }, style: 'primary', action_id: A.HR_MARK_REVIEW, value: caseId },
+      { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.ACKNOWLEDGED },
     ];
   }
   if (state === 'UNDER_REVIEW') {
     return [
-      { type: 'button', text: { type: 'plain_text', text: 'Resolve', emoji: true }, style: 'primary', action_id: 'pac_hr_resolve', value: caseId },
-      { type: 'overflow', action_id: 'pac_hr_overflow', options: overflowOptionsByState.UNDER_REVIEW },
+      { type: 'button', text: { type: 'plain_text', text: 'Resolve', emoji: true }, style: 'primary', action_id: A.HR_RESOLVE, value: caseId },
+      { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.UNDER_REVIEW },
     ];
   }
   if (state === 'ESCALATED') {
     return [
-      { type: 'button', text: { type: 'plain_text', text: 'Close Case', emoji: true }, style: 'primary', action_id: 'pac_hr_close', value: caseId },
-      { type: 'overflow', action_id: 'pac_hr_overflow', options: overflowOptionsByState.ESCALATED },
+      { type: 'button', text: { type: 'plain_text', text: 'Close Case', emoji: true }, style: 'primary', action_id: A.HR_CLOSE, value: caseId },
+      { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.ESCALATED },
     ];
   }
   return [webBtn];
@@ -430,16 +496,6 @@ function buildHrActions(state, caseId) {
 // Shows active cases, quick start, and how-it-works.
 
 function homeTabView(cases = []) {
-  const active = cases
-    .filter(c => !['CLOSED', 'ARCHIVED'].includes(c.state))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, 8);
-
-  const closed = cases
-    .filter(c => ['CLOSED', 'ARCHIVED'].includes(c.state))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, 3);
-
   const blocks = [
     // ── Masthead
     {
@@ -452,54 +508,33 @@ function homeTabView(cases = []) {
         type: 'button',
         text: { type: 'plain_text', text: 'Start New Check', emoji: true },
         style: 'primary',
-        action_id: 'pac_slash_open_intake',
+        action_id: A.SLASH_OPEN_INTAKE,
       },
     },
     { type: 'divider' },
   ];
 
-  // ── Active cases
-  if (active.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*Active Cases  (${active.length})*` },
-    });
-
-    active.forEach(c => {
+  // ── Case history
+  if (cases.length > 0) {
+    blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Recent Checks' } });
+    cases.slice(0, 5).forEach(c => {
       const risk = r(c.risk || 'good');
       const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const ref  = c.refName ? `  ·  ${c.refName}` : '  ·  _Self-check_';
       blocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*\n${stateLabel(c.state)}  ·  \`${c.id}\`  ·  ${date}`,
+          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\``,
         },
       });
     });
-
-    blocks.push({ type: 'divider' });
-  } else {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: '*Active Cases*\nNo active cases. Run `/pac` to start a new check.' },
-    });
-    blocks.push({ type: 'divider' });
-  }
-
-  // ── Recent closed cases
-  if (closed.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*Recently Closed*` },
-    });
-    closed.forEach(c => {
-      const risk = r(c.risk || 'good');
-      const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (cases.length > 5) {
       blocks.push({
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: `${risk.emoji}  ${c.scenario}  ·  \`${c.id}\`  ·  ${date}` }],
+        elements: [{ type: 'mrkdwn', text: `+${cases.length - 5} more — open the web app to see all.` }],
       });
-    });
+    }
     blocks.push({ type: 'divider' });
   }
 
@@ -540,7 +575,7 @@ function homeTabView(cases = []) {
 function hrReplyModal(caseId, title = 'Send Message to Manager') {
   return {
     type: 'modal',
-    callback_id: 'pac_modal_hr_reply',
+    callback_id: C.MODAL_HR_REPLY,
     title: { type: 'plain_text', text: title },
     submit: { type: 'plain_text', text: 'Send' },
     close:  { type: 'plain_text', text: 'Cancel' },
@@ -556,11 +591,11 @@ function hrReplyModal(caseId, title = 'Send Message to Manager') {
       { type: 'divider' },
       {
         type: 'input',
-        block_id: 'pac_block_hr_message',
+        block_id: B.HR_MESSAGE,
         label: { type: 'plain_text', text: 'Message' },
         element: {
           type: 'plain_text_input',
-          action_id: 'pac_hr_message_input',
+          action_id: A.HR_MESSAGE_INPUT,
           multiline: true,
           placeholder: { type: 'plain_text', text: 'Type your message to the manager…' },
           max_length: 2000,
@@ -575,7 +610,7 @@ function hrReplyModal(caseId, title = 'Send Message to Manager') {
 function hrResolveModal(caseId) {
   return {
     type: 'modal',
-    callback_id: 'pac_modal_hr_resolve',
+    callback_id: C.MODAL_HR_RESOLVE,
     title: { type: 'plain_text', text: 'Resolve Case' },
     submit: { type: 'plain_text', text: 'Resolve' },
     close:  { type: 'plain_text', text: 'Cancel' },
@@ -588,11 +623,11 @@ function hrResolveModal(caseId) {
       { type: 'divider' },
       {
         type: 'input',
-        block_id: 'pac_block_hr_resolution',
+        block_id: B.HR_RESOLUTION,
         label: { type: 'plain_text', text: 'Resolution note' },
         element: {
           type: 'plain_text_input',
-          action_id: 'pac_hr_resolution_input',
+          action_id: A.HR_RESOLUTION_INPUT,
           multiline: true,
           placeholder: { type: 'plain_text', text: 'Summarize the outcome and any action taken…' },
           max_length: 2000,
@@ -631,7 +666,7 @@ function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level 
           type: 'button',
           text: { type: 'plain_text', text: 'Reply to HR', emoji: true },
           style: 'primary',
-          action_id: 'pac_mgr_reply',
+          action_id: A.MGR_REPLY,
           value: JSON.stringify({ caseId, scenario }),
         },
       ],
@@ -649,7 +684,7 @@ function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level 
 function managerReplyModal(caseId, scenario) {
   return {
     type: 'modal',
-    callback_id: 'pac_modal_mgr_reply',
+    callback_id: C.MODAL_MGR_REPLY,
     title: { type: 'plain_text', text: 'Reply to HR' },
     submit: { type: 'plain_text', text: 'Send Reply' },
     close:  { type: 'plain_text', text: 'Cancel' },
@@ -662,11 +697,11 @@ function managerReplyModal(caseId, scenario) {
       { type: 'divider' },
       {
         type: 'input',
-        block_id: 'pac_block_mgr_reply',
+        block_id: B.MGR_REPLY,
         label: { type: 'plain_text', text: 'Your reply' },
         element: {
           type: 'plain_text_input',
-          action_id: 'pac_mgr_reply_input',
+          action_id: A.MGR_REPLY_INPUT,
           multiline: true,
           placeholder: { type: 'plain_text', text: 'Type your reply to HR…' },
           max_length: 2000,
@@ -677,6 +712,101 @@ function managerReplyModal(caseId, scenario) {
 }
 
 // ── Case list (DM or Home) ────────────────────────────────────────────────
+
+// ── HR reassign modal ────────────────────────────────────────────────────
+// HR picks a new manager via Slack user picker. Only shown for active cases.
+
+function hrReassignModal(caseId, scenario, currentManagerId) {
+  return {
+    type: 'modal',
+    callback_id: C.MODAL_HR_REASSIGN,
+    title: { type: 'plain_text', text: 'Reassign Case' },
+    submit: { type: 'plain_text', text: 'Reassign' },
+    close:  { type: 'plain_text', text: 'Cancel' },
+    private_metadata: JSON.stringify({ caseId, previousManagerId: currentManagerId }),
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Reassign case \`${caseId}\`*\n_${scenario}_\n\nCurrently assigned to <@${currentManagerId}>. Select the manager who should take over this open case. They will receive a full case summary in a Slack DM.`,
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'input',
+        block_id: B.NEW_MANAGER,
+        label: { type: 'plain_text', text: 'Reassign to' },
+        element: {
+          type: 'users_select',
+          action_id: A.REASSIGN_MANAGER_SELECT,
+          placeholder: { type: 'plain_text', text: 'Select a manager…' },
+        },
+      },
+      {
+        type: 'input',
+        block_id: B.REASSIGN_NOTE,
+        optional: true,
+        label: { type: 'plain_text', text: 'Note to new manager (optional)' },
+        element: {
+          type: 'plain_text_input',
+          action_id: A.REASSIGN_NOTE_INPUT,
+          multiline: false,
+          placeholder: { type: 'plain_text', text: 'e.g. "Previous manager left the company — please continue this case."' },
+          max_length: 300,
+        },
+      },
+    ],
+  };
+}
+
+// ── Reassigned case DM ───────────────────────────────────────────────────
+// Sent to the new manager when HR reassigns an active case to them.
+
+function caseReassignedDmMessage({ caseId, scenario, level, state, previousManagerId, hrNote }) {
+  const risk = r(level);
+  const blocks = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*People Action Check  ·  Case Reassigned to You*` },
+    },
+    { type: 'divider' },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*Scenario*\n${scenario}` },
+        { type: 'mrkdwn', text: `*Risk Level*\n${risk.emoji}  ${risk.label}` },
+        { type: 'mrkdwn', text: `*Case ID*\n\`${caseId}\`` },
+        { type: 'mrkdwn', text: `*Previous Manager*\n<@${previousManagerId}>` },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: hrNote
+          ? `*Note from HR:* ${hrNote}`
+          : `HR has reassigned this active case to you. Review the current state and follow up with HR if needed.`,
+      },
+    },
+    { type: 'divider' },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+          action_id: A.RESULT_OPEN_WEB,
+          value: caseId,
+        },
+      ],
+    },
+  ];
+  return {
+    text: `Case \`${caseId}\` has been reassigned to you — ${risk.label}: ${scenario}`,
+    attachments: [{ color: risk.color, blocks }],
+  };
+}
 
 function caseListBlocks(cases) {
   if (!cases.length) {
@@ -733,11 +863,89 @@ function handoffBlocks({ caseId, reason }) {
         type: 'button',
         text: { type: 'plain_text', text: 'Open Web App', emoji: true },
         style: 'primary',
-        action_id: 'pac_result_open_web',
+        action_id: A.RESULT_OPEN_WEB,
         value: caseId,
       },
     },
   ];
+}
+
+// ── Export modal ──────────────────────────────────────────────────────────
+
+function exportModal({ isHr = false } = {}) {
+  const filterOptions = [
+    { text: { type: 'plain_text', text: 'All cases' }, value: 'all' },
+    { text: { type: 'plain_text', text: 'HR cases only (notified)' }, value: 'hr' },
+    { text: { type: 'plain_text', text: 'Open cases only' }, value: 'open' },
+  ];
+
+  // Managers only see their own cases — no filter choice needed
+  const blocks = [
+    {
+      type: 'input',
+      block_id: B.EXPORT_FORMAT,
+      label: { type: 'plain_text', text: 'Format' },
+      element: {
+        type: 'static_select',
+        action_id: A.EXPORT_FORMAT,
+        placeholder: { type: 'plain_text', text: 'Choose a format' },
+        options: [
+          { text: { type: 'plain_text', text: 'CSV  —  Excel, Google Sheets, Numbers' }, value: 'csv' },
+          { text: { type: 'plain_text', text: 'Word doc (.doc)  —  opens in Word' }, value: 'word' },
+          { text: { type: 'plain_text', text: 'TSV  —  tab-separated (Excel native)' }, value: 'tsv' },
+          { text: { type: 'plain_text', text: 'JSON  —  raw data' }, value: 'json' },
+        ],
+      },
+    },
+    ...(isHr ? [{
+      type: 'input',
+      block_id: B.EXPORT_FILTER,
+      label: { type: 'plain_text', text: 'Cases to include' },
+      element: {
+        type: 'static_select',
+        action_id: A.EXPORT_FILTER,
+        initial_option: filterOptions[0],
+        options: filterOptions,
+      },
+    }] : []),
+    {
+      type: 'input',
+      block_id: B.EXPORT_DELIVERY,
+      label: { type: 'plain_text', text: 'Delivery' },
+      element: {
+        type: 'static_select',
+        action_id: A.EXPORT_DELIVERY,
+        placeholder: { type: 'plain_text', text: 'How to receive the file' },
+        options: [
+          { text: { type: 'plain_text', text: 'Send me a download link' }, value: 'link' },
+          { text: { type: 'plain_text', text: 'Email to me' }, value: 'email_self' },
+          { text: { type: 'plain_text', text: 'Email to a specific address' }, value: 'email_custom' },
+        ],
+      },
+    },
+    {
+      type: 'input',
+      block_id: B.EXPORT_EMAIL,
+      label: { type: 'plain_text', text: 'Email address (if emailing)' },
+      optional: true,
+      hint: { type: 'plain_text', text: 'For SharePoint: use your document library email address.' },
+      element: {
+        type: 'plain_text_input',
+        action_id: A.EXPORT_EMAIL,
+        placeholder: { type: 'plain_text', text: 'hr@company.com or sharepoint-library@company.sharepoint.com' },
+      },
+    },
+  ];
+
+  return {
+    type: 'modal',
+    callback_id: C.MODAL_EXPORT_CASES,
+    private_metadata: isHr ? 'hr' : 'manager',
+    title: { type: 'plain_text', text: 'Export Cases' },
+    submit: { type: 'plain_text', text: 'Export' },
+    close: { type: 'plain_text', text: 'Cancel' },
+    blocks,
+  };
 }
 
 module.exports = {
@@ -754,6 +962,9 @@ module.exports = {
   hrResolveModal,
   managerFollowupMessage,
   managerReplyModal,
+  hrReassignModal,
+  caseReassignedDmMessage,
   caseListBlocks,
   handoffBlocks,
+  exportModal,
 };
