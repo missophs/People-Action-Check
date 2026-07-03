@@ -928,12 +928,15 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
+  console.log('PAC_SKIP_SIG_VERIFY:', process.env.PAC_SKIP_SIG_VERIFY);
+  console.log('method:', event.httpMethod);
   if (!verifySignature(event)) {
     console.error('Slack signature verification failed');
     return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   const parsed = parseBody(event);
+  console.log('parsed command:', parsed.command, 'type:', parsed.type);
 
   // URL verification (Events API)
   if (parsed.type === 'url_verification') {
