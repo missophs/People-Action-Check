@@ -162,7 +162,7 @@ function ack(body = '') {
 // ── Slash command ─────────────────────────────────────────────────────────
 
 function handleSlashCommand() {
-  return ack({ response_type: 'ephemeral', blocks: slashResponseBlocks() });
+  return ack({ response_type: 'ephemeral', text: 'People Action Check is working! Full UI coming soon.' });
 }
 
 // ── Event callback ────────────────────────────────────────────────────────
