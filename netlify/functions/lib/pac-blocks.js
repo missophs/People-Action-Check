@@ -66,27 +66,20 @@ function slashResponseBlocks() {
         type: 'mrkdwn',
         text: '*People Action Check*\nStructured HR risk guidance before you act on an employee situation.',
       },
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: 'Choose a scenario, answer 5 risk questions, and get your risk level with recommended next steps — in under 2 minutes.',
+      accessory: {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Start New Check', emoji: true },
+        style: 'primary',
+        action_id: A.SLASH_OPEN_INTAKE,
       },
     },
+    { type: 'divider' },
     {
       type: 'actions',
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Start New Check', emoji: true },
-          style: 'primary',
-          action_id: A.SLASH_OPEN_INTAKE,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'My Cases',  emoji: true },
+          text: { type: 'plain_text', text: 'My Cases', emoji: true },
           action_id: A.SLASH_LIST_CASES,
         },
         {
@@ -98,12 +91,6 @@ function slashResponseBlocks() {
           type: 'button',
           text: { type: 'plain_text', text: 'Export', emoji: true },
           action_id: A.SLASH_EXPORT_CASES,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
-          action_id: A.RESULT_OPEN_WEB,
-          value: '',
         },
       ],
     },
@@ -147,12 +134,12 @@ function intakeModal() {
         type: 'input',
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: 'plain_text', text: 'Internal reference (optional)' },
-        hint: { type: 'plain_text', text: 'For your reference only — not shared with HR in Slack.' },
+        label: { type: 'plain_text', text: 'Leave blank for a private self-check. Add a note if you may escalate to HR.' },
+        hint: { type: 'plain_text', text: 'A note here does not notify HR by itself — it just keeps that option open later and helps you find this case again. Never shown to HR.' },
         element: {
           type: 'plain_text_input',
           action_id: A.INTAKE_REF_NAME,
-          placeholder: { type: 'plain_text', text: 'e.g. initials, ticket #, case code…' },
+          placeholder: { type: 'plain_text', text: 'e.g. J.D. or any short code you’ll recognize' },
           max_length: 80,
         },
       },
