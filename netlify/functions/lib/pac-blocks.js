@@ -164,17 +164,11 @@ function intakeModal(preSelectedScenario = null) {
     submit: { type: 'plain_text', text: 'Continue' },
     close:  { type: 'plain_text', text: 'Cancel' },
     blocks: [
-      ...headerBlocks,
-      {
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: ':bulb:  Leave the note blank for a private self-check. Add a note and HR is automatically notified when you finish.' }],
-      },
-      { type: 'divider' },
       {
         type: 'input',
         block_id: B.SCENARIO,
         label: { type: 'plain_text', text: 'Choose one or multiple scenarios' },
-        hint: { type: 'plain_text', text: 'Select every scenario that applies. Questions come from the first scenario you pick. Information and documentation guidance will show for all selected scenarios.' },
+        hint: { type: 'plain_text', text: 'Select every scenario that applies. Questions come from the first scenario you pick.' },
         element: scenarioElement,
       },
       { type: 'divider' },
@@ -182,8 +176,8 @@ function intakeModal(preSelectedScenario = null) {
         type: 'input',
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: 'plain_text', text: 'Employee or situation reference (optional)' },
-        hint: { type: 'plain_text', text: 'Add any note here and HR is automatically notified when you finish. Leave blank to keep this check private to you. HR never sees what you type.' },
+        label: { type: 'plain_text', text: 'Employee name or reference (optional)' },
+        hint: { type: 'plain_text', text: 'Enter the employee name or initials. If filled in, HR is automatically notified when you finish. Leave blank to keep this check private.' },
         element: {
           type: 'plain_text_input',
           action_id: A.INTAKE_REF_NAME,
@@ -191,6 +185,7 @@ function intakeModal(preSelectedScenario = null) {
           max_length: 80,
         },
       },
+      ...headerBlocks,
     ],
   };
 }
@@ -202,6 +197,19 @@ function questionsModal(scenario, questions, privateMetadata) {
   const meta = SCENARIO_META[scenario] || {};
 
   const blocks = [];
+
+  // -- Examples
+  if (meta.examples?.length > 0) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `->  ${e}`).join('\n')}` } });
+  }
+  // -- Documentation guidance
+  if (meta.docGuidance?.length > 0) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}` } });
+  }
+  // -- Watch for / Contact HR
+  if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+  if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+  if (blocks.length > 0) blocks.push({ type: 'divider' });
 
   // -- Questions header
   blocks.push({
