@@ -733,8 +733,6 @@ async function handleViewSubmission(payload) {
 
     const { level } = computeScore(questions, answers);
     const now = new Date().toISOString();
-
-    // If refName is set, HR is notified automatically on completion.
     const autoNotify = !!refName;
 
     const caseRecord = {
@@ -746,33 +744,19 @@ async function handleViewSubmission(payload) {
       followupCount: 0, hrNotified: false,
       auditLog: [auditEntry(E.CASE_CREATED, userId, { scenario, scenarios, level, source: 'slack' })],
     };
-    await saveCase(caseRecord);
 
-    // Show result as HR-notified from the start so the DM doesn't flash the wrong state
-    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
-    const dm    = await postMessage(userId, dmMsg);
-
-    if (dm.ok) {
-      await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
-    }
-
-    // Auto-notify HR if refName was provided
-    if (autoNotify) {
-      await notifyHrCore(caseId, userId);
-    }
-
-    // Email manager their result (fire-and-forget)
-    getSlackUserEmail(userId).then(email =>
-      emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
-    ).catch(() => {});
-
-    // Auto-handoff ephemeral for High Risk
-    if (level === 'risk') {
-      await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-    }
-
-    // Refresh App Home
-    await publishHomeTab(userId);
+    try {
+      await saveCase(caseRecord);
+      const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
+      const dm = await postMessage(userId, dmMsg);
+      if (dm.ok) await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
+      if (autoNotify) await notifyHrCore(caseId, userId);
+      getSlackUserEmail(userId).then(email =>
+        emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
+      ).catch(() => {});
+      if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
+      await publishHomeTab(userId);
+    } catch (e) { console.error('MODAL_QUESTIONS error:', e); }
 
     return ack({ response_action: 'clear' });
   }
