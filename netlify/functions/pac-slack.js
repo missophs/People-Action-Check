@@ -37,6 +37,7 @@ const {
   handoffBlocks,
   exportModal,
   hrPolicyLibraryModal,
+  uploadDocModal,
 } = require('./lib/pac-blocks');
 
 const { hrConfigStore } = require('./lib/blob-store');
@@ -339,33 +340,9 @@ async function handleBlockActions(payload) {
   // ── Upload documentation (opens modal with file_input)
   if (actionId === A.RESULT_UPLOAD_DOC) {
     const caseId = action.value;
-    await openModal(payload.trigger_id, {
-      type: 'modal',
-      callback_id: C.MODAL_UPLOAD_DOC,
-      title: { type: 'plain_text', text: 'Upload Documentation' },
-      submit: { type: 'plain_text', text: 'Attach to Case' },
-      close:  { type: 'plain_text', text: 'Cancel' },
-      private_metadata: JSON.stringify({ caseId }),
-      blocks: [
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: `*Attach files to case \`${caseId}\`*\nPIPs, write-ups, disciplinary records, or any supporting documentation. HR will be able to see these files.` },
-        },
-        { type: 'divider' },
-        {
-          type: 'input',
-          block_id: B.DOC_UPLOAD,
-          label: { type: 'plain_text', text: 'Files' },
-          hint: { type: 'plain_text', text: 'PDF, DOCX, PNG, JPG — up to 5 files.' },
-          element: {
-            type: 'file_input',
-            action_id: A.DOC_FILES,
-            filetypes: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'],
-            max_files: 5,
-          },
-        },
-      ],
-    });
+    const rec = await findCaseById(caseId);
+    const existingDocs = (rec?.attachments || []).map(f => ({ name: f.name, permalink: f.url }));
+    await openModal(payload.trigger_id, uploadDocModal(caseId, existingDocs));
     return ack();
   }
 
@@ -832,19 +809,24 @@ async function handleViewSubmission(payload) {
       auditLog: [...(rec.auditLog || []), auditEntry(E.DOCS_UPLOADED, userId, { count: fileRefs.length, files: fileRefs.map(f => f.name) })],
     });
 
-    // Share files directly to HR thread so they appear inline and are accessible to all channel members
-    if (rec.hrChannelId && rec.hrChannelTs && fileRefs.length > 0) {
+    // Notify HR thread with file links (files referenced by permalink per governance — not raw attached)
+    if (rec.hrNotified && rec.hrChannelId && rec.hrChannelTs && fileRefs.length > 0) {
+      const fileLinks = fileRefs.map(f => `• <${f.url}|${f.name}>`).join('\n');
       await postMessage(
         rec.hrChannelId,
-        [{ type: 'section', text: { type: 'mrkdwn', text: `📎  <@${userId}> attached ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} to case \`${caseId}\`` } }],
+        [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `📎  Manager added ${fileRefs.length} document${fileRefs.length > 1 ? 's' : ''} to case \`${caseId}\`:\n${fileLinks}` },
+        }],
         'Documents uploaded',
-        { thread_ts: rec.hrChannelTs, file_ids: fileRefs.map(f => f.id) }
+        { thread_ts: rec.hrChannelTs }
       );
     }
 
     // Confirm to manager
+    const hrNotice = rec.hrNotified ? ' HR has been notified and will receive these documents.' : '';
     const confirmText = fileRefs.length > 0
-      ? `✅  ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} attached to case \`${caseId}\`.${rec.hrChannelId ? ' HR has been notified.' : ''}`
+      ? `✅  ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} attached to case \`${caseId}\`.${hrNotice}`
       : `No files were attached to case \`${caseId}\`.`;
 
     await postMessage(userId, [{ type: 'section', text: { type: 'mrkdwn', text: confirmText } }]);

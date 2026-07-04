@@ -64,7 +64,7 @@ function slashResponseBlocks() {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: ':shield:  *People Action Check*\nGet HR guidance before you act. Private, confidential, under 2 minutes.',
+        text: ':shield:  *People Action Check*\nGet HR guidance before you act. Results stay private unless you choose to notify HR.',
       },
       accessory: {
         type: 'button',
@@ -75,7 +75,7 @@ function slashResponseBlocks() {
     },
     {
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: ':lock:  Private to you — nothing is posted to this channel' }],
+      elements: [{ type: 'mrkdwn', text: ':lock:  Results stay private unless you choose to notify HR' }],
     },
     { type: 'divider' },
     {
@@ -88,7 +88,7 @@ function slashResponseBlocks() {
         },
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'HR Queue', emoji: true },
+          text: { type: 'plain_text', text: 'HR Cases', emoji: true },
           action_id: A.SLASH_HR_CASES,
         },
         {
@@ -113,7 +113,7 @@ function intakeModal() {
     blocks: [
       {
         type: ‘context’,
-        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private to you — results are never posted to any channel’ }],
+        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private until you choose to notify HR’ }],
       },
       { type: ‘divider’ },
       {
@@ -136,8 +136,8 @@ function intakeModal() {
         type: ‘input’,
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: ‘plain_text’, text: ‘Employee reference (optional)’ },
-        hint: { type: ‘plain_text’, text: ‘A short private code you will recognize (e.g. initials). Only visible to you. Required if you want to escalate to HR later.’ },
+        label: { type: ‘plain_text’, text: ‘Leave blank for a private self-check. Add a note if you may escalate to HR.’ },
+        hint: { type: ‘plain_text’, text: ‘A note here does not notify HR by itself — it just keeps that option open later and helps you find this case again. Never shown to HR.’ },
         element: {
           type: ‘plain_text_input’,
           action_id: A.INTAKE_REF_NAME,
@@ -1017,6 +1017,59 @@ function hrPolicyLibraryModal(existingPolicies = []) {
   };
 }
 
+// ── Manager document upload modal ────────────────────────────────────────
+// existingDocs: array of { name, permalink } already attached to the case.
+
+function uploadDocModal(caseId, existingDocs = []) {
+  const existingSection = existingDocs.length > 0
+    ? [
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Already attached (${existingDocs.length}):*\n` +
+              existingDocs.map(f => `• <${f.permalink}|${f.name}>`).join('\n'),
+          },
+        },
+      ]
+    : [];
+
+  return {
+    type: 'modal',
+    callback_id: C.MODAL_UPLOAD_DOC,
+    title: { type: 'plain_text', text: 'Attach Documents' },
+    submit: { type: 'plain_text', text: 'Attach to Case' },
+    close:  { type: 'plain_text', text: 'Cancel' },
+    private_metadata: JSON.stringify({ caseId }),
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Case \`${caseId}\`* — attach supporting documentation`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: 'PIPs, write-ups, emails, or any supporting file. Any file type accepted. If HR has been notified, they will receive these documents.' }],
+      },
+      { type: 'divider' },
+      {
+        type: 'input',
+        block_id: B.DOC_UPLOAD,
+        label: { type: 'plain_text', text: 'Files' },
+        element: {
+          type: 'file_input',
+          action_id: A.DOC_FILES,
+          max_files: 10,
+        },
+      },
+      ...existingSection,
+    ],
+  };
+}
+
 module.exports = {
   computeScore,
   r,
@@ -1037,4 +1090,5 @@ module.exports = {
   handoffBlocks,
   exportModal,
   hrPolicyLibraryModal,
+  uploadDocModal,
 };
