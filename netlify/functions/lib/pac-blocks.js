@@ -621,6 +621,39 @@ function homeTabView(cases = []) {
         action_id: A.SLASH_OPEN_INTAKE,
       },
     },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '📁  Company Policies', emoji: true },
+          action_id: A.SLASH_OPEN_POLICIES,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'My Cases', emoji: true },
+          action_id: A.SLASH_LIST_CASES,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Export', emoji: true },
+          action_id: A.SLASH_EXPORT_CASES,
+        },
+      ],
+    },
+    { type: 'divider' },
+    // ── How to use
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: 'How to Use People Action Check', emoji: true },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*1.*  Pick a scenario — tap any card below or use "Start a Check."\n*2.*  Add a reference (optional) — initials keep a case findable later. Leave blank = private self-check only. HR is notified only when you add a note.\n*3.*  Answer 4–6 questions honestly. Your answers determine the risk level and recommended steps.\n*4.*  Get your result — Low, Moderate, or High Risk — with next steps, documentation tips, and options to attach files or email yourself a copy.\n\n_⚠️  This tool provides general HR guidance — not legal advice. For High Risk situations or formal complaints, consult HR directly._',
+      },
+    },
     { type: 'divider' },
   ];
 

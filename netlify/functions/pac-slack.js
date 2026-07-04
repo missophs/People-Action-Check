@@ -239,6 +239,13 @@ async function handleBlockActions(payload) {
     return ack();
   }
 
+  if (actionId === A.SLASH_OPEN_POLICIES) {
+    const store = hrConfigStore();
+    const existing = (await store.get('pac_policies', { type: 'json' })) || [];
+    await openModal(triggerId, hrPolicyLibraryModal(existing));
+    return ack();
+  }
+
   if (actionId === A.SLASH_LIST_CASES) {
     const cases = await listCasesForManager(userId);
     cases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
