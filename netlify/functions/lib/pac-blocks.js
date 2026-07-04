@@ -13,7 +13,7 @@
 //   MANAGER_DM        — employee identity allowed (private)
 //   APP_HOME          — manager's own context only
 
-const { SCENARIO_NAMES, NEXT_STEPS } = require('./pac-data');
+const { SCENARIO_NAMES, NEXT_STEPS, SCENARIO_META } = require('./pac-data');
 const { ACTION_IDS: A, BLOCK_IDS: B, CALLBACK_IDS: C } = require('./governance');
 
 // ── Risk system ──────────────────────────────────────────────────────────
@@ -103,14 +103,41 @@ function slashResponseBlocks() {
 
 // ── Intake modal ─────────────────────────────────────────────────────────
 
-function intakeModal() {
+function intakeModal(preSelectedScenario = null) {
+  const scenarioElement = {
+    type: ‘multi_static_select’,
+    action_id: A.INTAKE_SCENARIO,
+    placeholder: { type: ‘plain_text’, text: ‘Choose a situation...’ },
+    options: SCENARIO_NAMES.map(s => ({
+      text: { type: ‘plain_text’, text: s },
+      value: s,
+    })),
+    ...(preSelectedScenario ? {
+      initial_options: [{ text: { type: ‘plain_text’, text: preSelectedScenario }, value: preSelectedScenario }],
+    } : {}),
+  };
+
+  const headerBlocks = preSelectedScenario
+    ? [
+        {
+          type: ‘section’,
+          text: {
+            type: ‘mrkdwn’,
+            text: `${SCENARIO_META[preSelectedScenario]?.emoji || ‘📋’}  *${preSelectedScenario}*\n${SCENARIO_META[preSelectedScenario]?.description || ‘’}`,
+          },
+        },
+        { type: ‘divider’ },
+      ]
+    : [];
+
   return {
     type: ‘modal’,
     callback_id: C.MODAL_INTAKE,
     title: { type: ‘plain_text’, text: ‘New Check’ },
-    submit: { type: ‘plain_text’, text: ‘Start’ },
+    submit: { type: ‘plain_text’, text: ‘Continue’ },
     close:  { type: ‘plain_text’, text: ‘Cancel’ },
     blocks: [
+      ...headerBlocks,
       {
         type: ‘context’,
         elements: [{ type: ‘mrkdwn’, text: ‘:bulb:  Leave the note blank for a private self-check. Add a note and HR is automatically notified when you finish.’ }],
@@ -119,17 +146,9 @@ function intakeModal() {
       {
         type: ‘input’,
         block_id: B.SCENARIO,
-        label: { type: ‘plain_text’, text: ‘What are you dealing with?’ },
-        hint: { type: ‘plain_text’, text: ‘Pick the closest match. Select multiple if this spans more than one situation — questions will come from your first choice.’ },
-        element: {
-          type: ‘multi_static_select’,
-          action_id: A.INTAKE_SCENARIO,
-          placeholder: { type: ‘plain_text’, text: ‘Choose a situation...’ },
-          options: SCENARIO_NAMES.map(s => ({
-            text: { type: ‘plain_text’, text: s },
-            value: s,
-          })),
-        },
+        label: { type: ‘plain_text’, text: ‘Situation’ },
+        hint: { type: ‘plain_text’, text: ‘Select multiple if this spans more than one situation — questions will come from the first one you pick.’ },
+        element: scenarioElement,
       },
       { type: ‘divider’ },
       {
@@ -172,19 +191,22 @@ function questionsModal(scenario, questions, privateMetadata) {
     blocks.push({
       type: 'input',
       block_id: `${B.Q_PREFIX}${i}`,
-      label: { type: 'plain_text', text: `${i + 1}. ${q.q}` },
-      ...(q.hint || q.critical ? {
+      label: { type: 'plain_text', text: `${i + 1}. ${q.q}${q.critical ? '  ⚠️' : ''}` },
+      ...(q.hint ? {
         hint: { type: 'plain_text', text: q.critical
-          ? `${q.hint ? q.hint + '  ' : ''}Critical — No or Don't know raises this to High Risk.`
+          ? `${q.hint}  Critical — No or Don't know raises this to High Risk.`
           : q.hint },
+      } : q.critical ? {
+        hint: { type: 'plain_text', text: 'Critical — No or Don\'t know raises this to High Risk.' },
       } : {}),
       element: {
-        type: 'radio_buttons',
+        type: 'static_select',
         action_id: `${A.Q_ANSWER_PREFIX}${i}`,
+        placeholder: { type: 'plain_text', text: 'Choose an answer...' },
         options: [
-          { text: { type: 'plain_text', text: 'Yes'       }, value: 'yes'     },
-          { text: { type: 'plain_text', text: 'No'        }, value: 'no'      },
-          { text: { type: 'plain_text', text: "Don't know"}, value: 'unknown' },
+          { text: { type: 'plain_text', text: 'Yes'        }, value: 'yes'     },
+          { text: { type: 'plain_text', text: 'No'         }, value: 'no'      },
+          { text: { type: 'plain_text', text: "Not sure"   }, value: 'unknown' },
         ],
       },
     });
@@ -285,22 +307,50 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Answer breakdown
-  if (answers.length > 0) {
-    const yes = answers.filter(a => a === 'yes').length;
-    const no  = answers.filter(a => a === 'no').length;
-    const unk = answers.filter(a => a === 'unknown').length;
+  // ── Scenario meta: description, common examples, documentation guidance
+  const meta = SCENARIO_META[scenario];
+  if (meta) {
+    if (meta.description) {
+      blocks.push({ type: 'divider' });
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*ABOUT THIS SCENARIO*\n${meta.description}` },
+      });
+    }
+    if (meta.examples?.length > 0) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `→  ${e}`).join('\n')}`,
+        },
+      });
+    }
+    if (meta.docGuidance?.length > 0) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}`,
+        },
+      });
+    }
+  }
+
+  // ── Questions with selected answers in order
+  if (answers.length > 0 && questions.length > 0) {
+    const answerLabel = { yes: '✅  Yes', no: '❌  No', unknown: '❓  Not sure' };
     blocks.push({ type: 'divider' });
     blocks.push({
       type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*ANSWER BREAKDOWN*` },
-        { type: 'mrkdwn', text: ' ' },
-        { type: 'mrkdwn', text: `✅  Yes\n*${yes}*` },
-        { type: 'mrkdwn', text: `❌  No\n*${no}*` },
-        { type: 'mrkdwn', text: `❓  Don't know\n*${unk}*` },
-        { type: 'mrkdwn', text: ' ' },
-      ],
+      text: {
+        type: 'mrkdwn',
+        text: `*YOUR ANSWERS*\n${questions.map((q, i) => {
+          const label = answerLabel[answers[i]] || answers[i];
+          const critical = q.critical ? '  ⚠️' : '';
+          return `*${i + 1}.*${critical}  ${q.q}\n      ${label}`;
+        }).join('\n\n')}`,
+      },
     });
   }
 
@@ -623,34 +673,35 @@ function homeTabView(cases = []) {
     blocks.push({ type: 'divider' });
   }
 
-  // ── Scenarios quick reference
-  blocks.push(
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: '*Scenarios covered*' },
-    },
-    {
-      type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: '🟢  Performance Decline\n🟢  Attendance Issue\n🟢  Interpersonal Conflict\n🟢  Policy Violation\n🟢  Leave of Absence' },
-        { type: 'mrkdwn', text: '🔴  Termination Consideration\n🔴  Accommodation Request\n🔴  Harassment / Discrimination\n🔴  Retaliation Concern\n🔴  Reduction in Force' },
-      ],
-    },
-    { type: 'divider' },
-    // ── How it works
-    {
+  // ── Scenario cards — each is its own entry point
+  blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Select a Scenario' } });
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: 'Tap a scenario to start a check for that situation. Each has its own questions, examples, and documentation guidance.' }],
+  });
+
+  SCENARIO_NAMES.forEach(name => {
+    const meta = SCENARIO_META[name] || {};
+    blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: '*How it works*\n1.  Run `/pac` in any channel\n2.  Select your scenario and answer 5 risk questions\n3.  Get your risk level (Low / Elevated / High) with recommended next steps\n4.  Notify HR directly from Slack if needed\n5.  HR reviews, responds, and updates the case — all in Slack\n6.  Full case history, audit log, and documents available in the web app',
+        text: `${meta.emoji || '📋'}  *${name}*\n${meta.description ? meta.description.split('.')[0] + '.' : ''}`,
       },
-    },
-    { type: 'divider' },
-    {
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: 'People Action Check  ·  General guidance only — not legal advice.  ·  © 2026 Melissa A. Weiss' }],
-    },
-  );
+      accessory: {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Start Check', emoji: true },
+        action_id: A.SLASH_OPEN_SCENARIO,
+        value: name,
+      },
+    });
+  });
+
+  blocks.push({ type: 'divider' });
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: 'People Action Check  ·  General guidance only — not legal advice.' }],
+  });
 
   return { type: 'home', blocks };
 }

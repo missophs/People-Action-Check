@@ -16,7 +16,7 @@
 
 const crypto = require('crypto');
 const dataStore = require('./lib/data-store');
-const { SCENARIO_QUESTIONS } = require('./lib/pac-data');
+const { SCENARIO_QUESTIONS, SCENARIO_META } = require('./lib/pac-data');
 const {
   computeScore,
   r,
@@ -230,6 +230,12 @@ async function handleBlockActions(payload) {
   // ── Slash / home actions
   if (actionId === A.SLASH_OPEN_INTAKE) {
     await openModal(triggerId, intakeModal());
+    return ack();
+  }
+
+  if (actionId === A.SLASH_OPEN_SCENARIO) {
+    const scenario = action.value;
+    await openModal(triggerId, intakeModal(scenario));
     return ack();
   }
 
