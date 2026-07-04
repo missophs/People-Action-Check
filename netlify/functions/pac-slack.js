@@ -121,7 +121,7 @@ function newCaseId() {
 // ── Slack API ─────────────────────────────────────────────────────────────
 
 async function slackApi(method, body) {
-  const token = process.env.PAC_SLACK_BOT_TOKEN;
+  const token = activeToken || process.env.PAC_SLACK_BOT_TOKEN;
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: 'POST',
     headers: {
@@ -162,7 +162,7 @@ async function postEphemeral(channel, userId, blocks, text = 'People Action Chec
 
 // Upload a text/CSV file natively to a Slack channel using files.getUploadURLExternal + files.completeUploadExternal
 async function uploadFileToChannel(channel, filename, content, initialComment = '') {
-  const token = process.env.PAC_SLACK_BOT_TOKEN;
+  const token = activeToken || process.env.PAC_SLACK_BOT_TOKEN;
   if (!token) return null;
 
   try {
@@ -207,17 +207,40 @@ async function publishHomeTab(userId) {
   return slackApi('views.publish', { user_id: userId, view: homeTabView(cases) });
 }
 
-// ── Signing secret ────────────────────────────────────────────────────────
+// ── Multi-workspace token resolution ─────────────────────────────────────
+// When PAC_CONSULTING_SIGNING_SECRET is set, we support two workspaces.
+// verifySignature returns 'hr' | 'consulting' | false.
+// activeToken is set per-request so slackApi uses the right bot token.
+
+let activeToken = null;
+
+function tryVerify(secret, ts, sig, rawBody) {
+  if (!secret) return false;
+  const computed = `v0=${crypto.createHmac('sha256', secret).update(`v0:${ts}:${rawBody}`).digest('hex')}`;
+  try { return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(sig)); } catch { return false; }
+}
 
 function verifySignature(event) {
-  const secret = process.env.PAC_SLACK_SIGNING_SECRET;
-  if (!secret) { console.warn('PAC_SLACK_SIGNING_SECRET not set'); return true; }
   const ts  = event.headers['x-slack-request-timestamp'] || event.headers['X-Slack-Request-Timestamp'] || '';
   const sig = event.headers['x-slack-signature']         || event.headers['X-Slack-Signature']         || '';
   if (!ts || !sig) return false;
   if (Math.abs(Date.now() / 1000 - parseInt(ts, 10)) > 300) return false;
-  const computed = `v0=${crypto.createHmac('sha256', secret).update(`v0:${ts}:${event.body}`).digest('hex')}`;
-  try { return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(sig)); } catch { return false; }
+  const rawBody = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : (event.body || '');
+
+  const hrSecret = process.env.PAC_SLACK_SIGNING_SECRET;
+  const consultSecret = process.env.PAC_CONSULTING_SIGNING_SECRET;
+
+  if (!hrSecret && !consultSecret) { console.warn('No signing secret set'); activeToken = process.env.PAC_SLACK_BOT_TOKEN; return true; }
+
+  if (tryVerify(hrSecret, ts, sig, rawBody)) {
+    activeToken = process.env.PAC_SLACK_BOT_TOKEN;
+    return true;
+  }
+  if (tryVerify(consultSecret, ts, sig, rawBody)) {
+    activeToken = process.env.PAC_CONSULTING_BOT_TOKEN || process.env.PAC_SLACK_BOT_TOKEN;
+    return true;
+  }
+  return false;
 }
 
 // ── Body parsing ──────────────────────────────────────────────────────────
@@ -1126,6 +1149,7 @@ async function handleViewSubmission(payload) {
 // ── Main handler ──────────────────────────────────────────────────────────
 
 exports.handler = async function (event) {
+  activeToken = null;
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' };
   }
