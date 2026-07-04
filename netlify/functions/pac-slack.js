@@ -465,18 +465,13 @@ async function handleBlockActions(payload) {
 
 // ── HR notify helper ──────────────────────────────────────────────────────
 
-async function handleNotifyHr(caseId, userId, channelId) {
+// Core HR notification logic — shared by manual "Send to HR" and auto-notify on check completion.
+async function notifyHrCore(caseId, userId) {
   const rec = await findCaseById(caseId);
-  if (!rec) return ack();
+  if (!rec) return;
 
   const hrChannelId = process.env.PAC_HR_CHANNEL_ID;
-  if (!hrChannelId) {
-    await postEphemeral(channelId || userId, userId, [{
-      type: 'section',
-      text: { type: 'mrkdwn', text: '⚠️  HR channel not configured. Set `PAC_HR_CHANNEL_ID` in Netlify environment variables.' },
-    }]);
-    return ack();
-  }
+  if (!hrChannelId) return;
 
   const now = new Date().toISOString();
   const msg = await postMessage(
@@ -498,19 +493,19 @@ async function handleNotifyHr(caseId, userId, channelId) {
   };
   await saveCase(updated);
 
-  // If manager uploaded docs before notifying HR, share them to the HR thread now
-  // Using file_ids so files appear inline and HR members can access them directly
+  // Prior attachments → post permalink links to HR thread
   const priorAttachments = rec.attachments || [];
   if (priorAttachments.length > 0) {
+    const fileLinks = priorAttachments.map(f => `• <${f.url}|${f.name}>`).join('\n');
     await postMessage(
       hrChannelId,
-      [{ type: 'section', text: { type: 'mrkdwn', text: `📎  <@${userId}> attached ${priorAttachments.length} file${priorAttachments.length > 1 ? 's' : ''} before notifying HR` } }],
+      [{ type: 'section', text: { type: 'mrkdwn', text: `📎  Manager attached ${priorAttachments.length} file${priorAttachments.length > 1 ? 's' : ''} to this case:\n${fileLinks}` } }],
       'Prior documentation',
-      { thread_ts: msg.ts, file_ids: priorAttachments.map(f => f.id) }
+      { thread_ts: msg.ts }
     );
   }
 
-  // Update manager's result DM to show HR was notified
+  // Update manager DM to show HR notified state
   if (rec.dmTs && rec.dmChannelId) {
     await updateMessage(
       rec.dmChannelId, rec.dmTs,
@@ -518,7 +513,7 @@ async function handleNotifyHr(caseId, userId, channelId) {
     );
   }
 
-  // Email HR with case details + any pre-existing attachments (fire-and-forget)
+  // Email HR (fire-and-forget)
   getHrEmail().then(hrEmail =>
     emailNotify.notifyHrOfCase({
       hrEmail, scenario: rec.scenario, level: rec.risk,
@@ -526,7 +521,18 @@ async function handleNotifyHr(caseId, userId, channelId) {
       fileRefs: rec.attachments || [],
     })
   ).catch(() => {});
+}
 
+async function handleNotifyHr(caseId, userId, channelId) {
+  const hrChannelId = process.env.PAC_HR_CHANNEL_ID;
+  if (!hrChannelId) {
+    await postEphemeral(channelId || userId, userId, [{
+      type: 'section',
+      text: { type: 'mrkdwn', text: '⚠️  HR channel not configured. Set `PAC_HR_CHANNEL_ID` in Netlify environment variables.' },
+    }]);
+    return ack();
+  }
+  await notifyHrCore(caseId, userId);
   return ack();
 }
 
@@ -641,6 +647,9 @@ async function handleViewSubmission(payload) {
     const { level } = computeScore(questions, answers);
     const now = new Date().toISOString();
 
+    // If refName is set, HR is notified automatically on completion.
+    const autoNotify = !!refName;
+
     const caseRecord = {
       id: caseId, scenario, scenarios, refName,
       managerId: userId, source: 'slack',
@@ -652,11 +661,17 @@ async function handleViewSubmission(payload) {
     };
     await saveCase(caseRecord);
 
-    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: false, refName: refName || '', answers, questions });
+    // Show result as HR-notified from the start so the DM doesn't flash the wrong state
+    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
     const dm    = await postMessage(userId, dmMsg);
 
     if (dm.ok) {
       await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
+    }
+
+    // Auto-notify HR if refName was provided
+    if (autoNotify) {
+      await notifyHrCore(caseId, userId);
     }
 
     // Email manager their result (fire-and-forget)

@@ -61,21 +61,21 @@ function computeScore(questions, answers) {
 function slashResponseBlocks() {
   return [
     {
+      type: 'header',
+      text: { type: 'plain_text', text: 'People Action Check', emoji: true },
+    },
+    {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: ':shield:  *People Action Check*\nGet HR guidance before you act. Results stay private unless you choose to notify HR.',
+        text: 'A structured risk check before you take action on an employee situation. Under 2 minutes. Leave the reference blank for a private self-check — add a note and HR is automatically notified when you finish.',
       },
       accessory: {
         type: 'button',
-        text: { type: 'plain_text', text: 'Run a Check', emoji: true },
+        text: { type: 'plain_text', text: 'Start a Check', emoji: true },
         style: 'primary',
         action_id: A.SLASH_OPEN_INTAKE,
       },
-    },
-    {
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: ':lock:  Results stay private unless you choose to notify HR' }],
     },
     { type: 'divider' },
     {
@@ -113,7 +113,7 @@ function intakeModal() {
     blocks: [
       {
         type: ‘context’,
-        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private until you choose to notify HR’ }],
+        elements: [{ type: ‘mrkdwn’, text: ‘:bulb:  Leave the note blank for a private self-check. Add a note and HR is automatically notified when you finish.’ }],
       },
       { type: ‘divider’ },
       {
@@ -136,8 +136,8 @@ function intakeModal() {
         type: ‘input’,
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: ‘plain_text’, text: ‘Leave blank for a private self-check. Add a note if you may escalate to HR.’ },
-        hint: { type: ‘plain_text’, text: ‘A note here does not notify HR by itself — it just keeps that option open later and helps you find this case again. Never shown to HR.’ },
+        label: { type: ‘plain_text’, text: ‘Employee or situation reference (optional)’ },
+        hint: { type: ‘plain_text’, text: ‘Add any note here and HR is automatically notified when you finish. Leave blank to keep this check private to you. HR never sees what you type.’ },
         element: {
           type: ‘plain_text_input’,
           action_id: A.INTAKE_REF_NAME,
@@ -220,52 +220,68 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
   const risk = r(level);
   const steps = NEXT_STEPS[scenario] || {};
   const stepList = steps[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
-  const scenarioDisplay = scenarios.length > 1
-    ? `${scenario}\n_+ ${scenarios.slice(1).join(', ')}_`
-    : scenario;
 
-  const statusFlag = selfCheck
-    ? ':lock:  Private check'
-    : hrNotified ? ':white_check_mark:  HR notified' : ':hourglass_flowing_sand:  Awaiting HR';
+  const otherScenarios = scenarios.length > 1
+    ? `\n_Also flagged: ${scenarios.slice(1).join(', ')}_`
+    : '';
 
-  const guidanceText = level === 'risk'
-    ? `:red_circle:  *High Risk — stop. HR clearance required before any action.*\nDo not schedule meetings, issue warnings, or communicate with the employee until HR has reviewed this case.`
+  const statusLine = selfCheck
+    ? '🔒  Private self-check'
+    : hrNotified
+    ? '✅  Sent to HR'
+    : '⏳  Awaiting HR';
+
+  const riskHeader = level === 'risk'
+    ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
     : level === 'warn'
-    ? `:yellow_circle:  *Elevated Risk — consult HR before you proceed.*\nAddress the documentation gaps below and confirm your next move with HR first.`
-    : `:large_green_circle:  *Low Risk — routine management action.*\nProceed using standard process. Document each step you take.`;
+    ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
+    : '🟢  LOW RISK — Routine management action — proceed carefully.';
+
+  const guidanceDetail = level === 'risk'
+    ? 'Do not schedule meetings, issue warnings, or communicate with the employee until HR has reviewed this case.'
+    : level === 'warn'
+    ? 'Address the documentation gaps below and confirm your next move with HR first.'
+    : 'Your answers indicate this situation is within standard management scope. Document each step you take.';
 
   const blocks = [
+    // ── Header: scenario + status
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${scenarioDisplay}*\n\`${caseId}\`  ·  ${statusFlag}`,
+        text: `*${scenario}*${otherScenarios}\n${statusLine}  ·  \`${caseId}\``,
       },
     },
     { type: 'divider' },
+
+    // ── Risk level + guidance
     {
       type: 'section',
-      text: { type: 'mrkdwn', text: guidanceText },
+      text: {
+        type: 'mrkdwn',
+        text: `*${riskHeader}*\n${guidanceDetail}`,
+      },
     },
   ];
 
-  // ── Next steps (scenario-specific)
+  // ── Recommended next steps
   if (stepList.length > 0) {
+    blocks.push({ type: 'divider' });
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*Recommended next steps:*\n${stepList.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}`,
+        text: `*RECOMMENDED NEXT STEPS*\n${stepList.map((s, i) => `*${i + 1}*   ${s}`).join('\n\n')}`,
       },
     });
   }
 
-  // ── "Still not sure?" caution (scenario-specific, shown at good/warn levels)
+  // ── "Still not sure?" caution (scenario-specific)
   const caution = SCENARIO_CAUTION[scenario];
   if (caution && level !== 'risk') {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: `⚠️  *Still not sure?* ${caution}` }],
+      elements: [{ type: 'mrkdwn', text: `⚠️  *Still not sure?*  ${caution}` }],
     });
   }
 
@@ -277,20 +293,24 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     blocks.push({ type: 'divider' });
     blocks.push({
       type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*Answer breakdown:*  ✅ Yes: *${yes}*   ❌ No: *${no}*   ❓ Don't know: *${unk}*`,
-      },
+      fields: [
+        { type: 'mrkdwn', text: `*ANSWER BREAKDOWN*` },
+        { type: 'mrkdwn', text: ' ' },
+        { type: 'mrkdwn', text: `✅  Yes\n*${yes}*` },
+        { type: 'mrkdwn', text: `❌  No\n*${no}*` },
+        { type: 'mrkdwn', text: `❓  Don't know\n*${unk}*` },
+        { type: 'mrkdwn', text: ' ' },
+      ],
     });
   }
 
   blocks.push({ type: 'divider' });
 
-  // ── Primary actions (Notify HR / Upload / Open Web)
+  // ── HR status + primary actions
   if (selfCheck) {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '🔒  Saved to your history only. HR has not been notified.' }],
+      elements: [{ type: 'mrkdwn', text: '🔒  Saved to your private history. HR has not been notified and cannot be without a case reference.' }],
     });
     blocks.push({
       type: 'actions',
@@ -306,14 +326,15 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
   } else if (hrNotified) {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '✅  HR has been notified and will follow up in Slack.' }],
+      elements: [{ type: 'mrkdwn', text: '✅  Sent to HR — they will follow up in Slack.' }],
     });
     blocks.push({
       type: 'actions',
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Upload Documentation', emoji: true },
+          text: { type: 'plain_text', text: 'Attach Files', emoji: true },
+          style: 'primary',
           action_id: A.RESULT_UPLOAD_DOC,
           value: caseId,
         },
@@ -326,6 +347,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
       ],
     });
   } else {
+    // Back-compat: refName set but HR not yet notified (edge case from old flow)
     blocks.push({
       type: 'actions',
       elements: [
@@ -338,7 +360,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
         },
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Upload Documentation', emoji: true },
+          text: { type: 'plain_text', text: 'Attach Files', emoji: true },
           action_id: A.RESULT_UPLOAD_DOC,
           value: caseId,
         },
@@ -352,37 +374,38 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Secondary actions (run again, email report, 30-day follow-up)
+  // ── Secondary row: run again, email report, 30-day reminder
   blocks.push({
     type: 'actions',
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: 'Run Again', emoji: true },
+        text: { type: 'plain_text', text: '↩  Run Again', emoji: true },
         action_id: A.SLASH_OPEN_INTAKE,
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: 'Email Report', emoji: true },
+        text: { type: 'plain_text', text: '✉  Email Report', emoji: true },
         action_id: A.RESULT_EMAIL_SELF,
         value: caseId,
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: '📅 Set 30-Day Reminder', emoji: true },
+        text: { type: 'plain_text', text: '📅  Set 30-Day Reminder', emoji: true },
         action_id: A.RESULT_SET_FOLLOWUP,
         value: caseId,
       },
     ],
   });
 
-  // Web handoff for high risk / many follow-ups
+  // ── Web handoff callout for high risk / many follow-ups
   if ((level === 'risk' || followupCount >= 3) && hrNotified) {
+    blocks.push({ type: 'divider' });
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `For full case history, attachments, and HR review — use the web app.\nCase: \`${caseId}\``,
+        text: `*Full case history, documents, and HR audit log available in the web app.*`,
       },
       accessory: {
         type: 'button',
@@ -532,14 +555,18 @@ function homeTabView(cases = []) {
   const blocks = [
     // ── Masthead
     {
+      type: 'header',
+      text: { type: 'plain_text', text: '🛡️  People Action Check', emoji: true },
+    },
+    {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: ':shield:  *People Action Check*\nConfidential HR guidance before you act. Under 2 minutes.',
+        text: 'A structured HR risk check before you act on an employee situation. Answer 5 questions, get a risk level (Low / Elevated / High), and recommended next steps.\n\n*Leave the reference blank for a private self-check. Add a note and HR is automatically notified when you finish.*',
       },
       accessory: {
         type: 'button',
-        text: { type: 'plain_text', text: 'Run a Check', emoji: true },
+        text: { type: 'plain_text', text: 'Start a Check', emoji: true },
         style: 'primary',
         action_id: A.SLASH_OPEN_INTAKE,
       },
