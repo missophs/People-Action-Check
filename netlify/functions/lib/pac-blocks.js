@@ -185,7 +185,6 @@ function intakeModal(preSelectedScenario = null) {
           max_length: 80,
         },
       },
-      ...headerBlocks,
     ],
   };
 }
@@ -194,8 +193,22 @@ function intakeModal(preSelectedScenario = null) {
 
 function questionsModal(scenario, questions, privateMetadata) {
   const criticalCount = questions.filter(q => q.critical).length;
+  const meta = SCENARIO_META[scenario] || {};
 
   const blocks = [];
+
+  // -- Examples
+  if (meta.examples?.length > 0) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `→  ${e}`).join('\n')}` } });
+  }
+  // -- Documentation guidance
+  if (meta.docGuidance?.length > 0) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}` } });
+  }
+  // -- Watch for / Contact HR
+  if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+  if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+  if (blocks.length > 0) blocks.push({ type: 'divider' });
 
   // -- Questions header
   blocks.push({
