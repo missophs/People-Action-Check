@@ -774,7 +774,7 @@ async function handleViewSubmission(payload) {
     // Refresh App Home
     await publishHomeTab(userId);
 
-    return ack('');
+    return ack({ response_action: 'clear' });
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread
