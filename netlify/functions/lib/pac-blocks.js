@@ -28,7 +28,7 @@ function r(level) { return RISK[level] || RISK.good; }
 
 const STATE_LABELS = {
   NOT_STARTED:       '○  Not Started',
-  IN_PROGRESS_SLACK: '✏️  In Progress',
+  IN_PROGRESS_SLACK: 'In Progress',
   SUBMITTED:         '📥  Submitted',
   ACKNOWLEDGED:      '👀  Acknowledged',
   UNDER_REVIEW:      '🔍  Under Review',
