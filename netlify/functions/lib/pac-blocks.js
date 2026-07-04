@@ -374,29 +374,29 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Secondary row: run again, email report, 30-day reminder
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '↩  Run Again', emoji: true },
-        action_id: A.SLASH_OPEN_INTAKE,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '✉  Email Report', emoji: true },
-        action_id: A.RESULT_EMAIL_SELF,
-        value: caseId,
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: '📅  Set 30-Day Reminder', emoji: true },
-        action_id: A.RESULT_SET_FOLLOWUP,
-        value: caseId,
-      },
-    ],
-  });
+  // ── Secondary row: run again, email report, 30-day reminder (reminder only for HR cases)
+  const secondaryElements = [
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: '↩  Run Again', emoji: true },
+      action_id: A.SLASH_OPEN_INTAKE,
+    },
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: '✉  Email Report', emoji: true },
+      action_id: A.RESULT_EMAIL_SELF,
+      value: caseId,
+    },
+  ];
+  if (!selfCheck) {
+    secondaryElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: '📅  Set 30-Day Reminder', emoji: true },
+      action_id: A.RESULT_SET_FOLLOWUP,
+      value: caseId,
+    });
+  }
+  blocks.push({ type: 'actions', elements: secondaryElements });
 
   // ── Web handoff callout for high risk / many follow-ups
   if ((level === 'risk' || followupCount >= 3) && hrNotified) {
