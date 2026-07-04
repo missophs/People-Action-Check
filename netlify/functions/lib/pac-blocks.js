@@ -177,7 +177,7 @@ function intakeModal(preSelectedScenario = null) {
         block_id: B.REF_NAME,
         optional: true,
         label: { type: 'plain_text', text: 'Employee name or reference (optional)' },
-        hint: { type: 'plain_text', text: 'Enter the employee name or initials. If filled in, HR is automatically notified when you finish. Leave blank to keep this check private.' },
+        hint: { type: 'plain_text', text: 'Enter initials or a short reference. If filled in, HR is notified when you finish. Leave blank to keep private.' },
         element: {
           type: 'plain_text_input',
           action_id: A.INTAKE_REF_NAME,
@@ -185,7 +185,6 @@ function intakeModal(preSelectedScenario = null) {
           max_length: 80,
         },
       },
-      ...headerBlocks,
     ],
   };
 }
