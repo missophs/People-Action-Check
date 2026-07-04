@@ -118,16 +118,38 @@ function intakeModal(preSelectedScenario = null) {
   };
 
   const headerBlocks = preSelectedScenario
-    ? [
-        {
-          type: ‘section’,
-          text: {
-            type: ‘mrkdwn’,
-            text: `${SCENARIO_META[preSelectedScenario]?.emoji || ‘📋’}  *${preSelectedScenario}*\n${SCENARIO_META[preSelectedScenario]?.description || ‘’}`,
+    ? (() => {
+        const m = SCENARIO_META[preSelectedScenario] || {};
+        const blocks = [
+          {
+            type: ‘header’,
+            text: { type: ‘plain_text’, text: `${m.emoji || ‘📋’}  ${preSelectedScenario}`, emoji: true },
           },
-        },
-        { type: ‘divider’ },
-      ]
+          {
+            type: ‘context’,
+            elements: [{ type: ‘mrkdwn’, text: `*${m.riskLabel || ‘Moderate Risk’}*  ·  ${m.description || ‘’}` }],
+          },
+        ];
+        if (m.examples?.length) {
+          blocks.push({ type: ‘divider’ });
+          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: ‘*COMMON EXAMPLES*’ } });
+          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: m.examples.map(e => `→  ${e}`).join(‘\n’) } });
+        }
+        if (m.docGuidance?.length) {
+          blocks.push({ type: ‘divider’ });
+          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: ‘*DOCUMENTATION GUIDANCE*’ } });
+          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: m.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join(‘\n’) } });
+        }
+        if (m.watch) {
+          blocks.push({ type: ‘divider’ });
+          blocks.push({ type: ‘context’, elements: [{ type: ‘mrkdwn’, text: `⚠️  *Watch for:* ${m.watch}` }] });
+        }
+        if (m.contactHR) {
+          blocks.push({ type: ‘context’, elements: [{ type: ‘mrkdwn’, text: `📞  *Not sure? Contact HR:* ${m.contactHR}` }] });
+        }
+        blocks.push({ type: ‘divider’ });
+        return blocks;
+      })()
     : [];
 
   return {
@@ -211,6 +233,18 @@ function questionsModal(scenario, questions, privateMetadata) {
       },
     });
   });
+
+  // ── Watch for / Contact HR at bottom of questions
+  const meta = SCENARIO_META[scenario];
+  if (meta?.watch || meta?.contactHR) {
+    blocks.push({ type: 'divider' });
+    if (meta.watch) {
+      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+    }
+    if (meta.contactHR) {
+      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+    }
+  }
 
   return {
     type: 'modal',
@@ -626,7 +660,7 @@ function homeTabView(cases = []) {
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: '📁  Company Policies', emoji: true },
+          text: { type: 'plain_text', text: 'Company Policies', emoji: true },
           action_id: A.SLASH_OPEN_POLICIES,
         },
         {
