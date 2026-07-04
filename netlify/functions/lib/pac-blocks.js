@@ -108,12 +108,17 @@ function intakeModal(preSelectedScenario = null) {
     type: 'multi_static_select',
     action_id: A.INTAKE_SCENARIO,
     placeholder: { type: 'plain_text', text: 'Choose a situation...' },
-    options: SCENARIO_NAMES.map(s => ({
-      text: { type: 'plain_text', text: s },
-      value: s,
-    })),
+    options: SCENARIO_NAMES.map(s => {
+      const m = SCENARIO_META[s] || {};
+      const label = `${m.emoji || ''} ${s}  —  ${m.riskLabel || 'Moderate Risk'}`;
+      return { text: { type: 'plain_text', text: label }, value: s };
+    }),
     ...(preSelectedScenario ? {
-      initial_options: [{ text: { type: 'plain_text', text: preSelectedScenario }, value: preSelectedScenario }],
+      initial_options: [(() => {
+        const m = SCENARIO_META[preSelectedScenario] || {};
+        const label = `${m.emoji || ''} ${preSelectedScenario}  —  ${m.riskLabel || 'Moderate Risk'}`;
+        return { text: { type: 'plain_text', text: label }, value: preSelectedScenario };
+      })()],
     } : {}),
   };
 
