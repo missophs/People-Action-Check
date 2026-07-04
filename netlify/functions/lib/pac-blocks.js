@@ -240,6 +240,7 @@ function questionsModal(scenario, questions, privateMetadata) {
       element: {
         type: 'radio_buttons',
         action_id: `${A.Q_ANSWER_PREFIX}${i}`,
+        focus_on_load: false,
         options: [
           { text: { type: 'plain_text', text: 'Yes'      }, value: 'yes'     },
           { text: { type: 'plain_text', text: 'No'       }, value: 'no'      },
