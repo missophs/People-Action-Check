@@ -821,12 +821,23 @@ function homeTabView(cases = []) {
           type: 'mrkdwn',
           text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}${docsNote}  ·  \`${c.id}\``,
         },
-        accessory: {
-          type: 'button',
-          text: { type: 'plain_text', text: 'View', emoji: true },
-          action_id: A.SLASH_VIEW_CASE,
-          value: c.id,
-        },
+      });
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'View in Slack', emoji: true },
+            action_id: A.SLASH_VIEW_CASE,
+            value: c.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+            action_id: A.RESULT_OPEN_WEB,
+            value: c.id,
+          },
+        ],
       });
     });
   }
