@@ -16,7 +16,7 @@
 const { SCENARIO_NAMES, NEXT_STEPS, SCENARIO_META } = require('./pac-data');
 const { ACTION_IDS: A, BLOCK_IDS: B, CALLBACK_IDS: C } = require('./governance');
 
-// ── Risk system ──────────────────────────────────────────────────────────
+// -- Risk system ----------------------------------------------------------
 
 const RISK = {
   good: { color: '#34d399', emoji: '🟢', label: 'Low Risk',      dot: '●' },
@@ -39,7 +39,7 @@ const STATE_LABELS = {
 
 function stateLabel(state) { return STATE_LABELS[state] || state; }
 
-// ── Scoring ──────────────────────────────────────────────────────────────
+// -- Scoring --------------------------------------------------------------
 // Answers: 'yes' | 'no' | 'unknown'
 
 function computeScore(questions, answers) {
@@ -56,7 +56,7 @@ function computeScore(questions, answers) {
   return { level, hasCriticalFlag, ratio };
 }
 
-// ── Slash command ephemeral ──────────────────────────────────────────────
+// -- Slash command ephemeral ----------------------------------------------
 
 function slashResponseBlocks() {
   return [
@@ -101,19 +101,19 @@ function slashResponseBlocks() {
   ];
 }
 
-// ── Intake modal ─────────────────────────────────────────────────────────
+// -- Intake modal ---------------------------------------------------------
 
 function intakeModal(preSelectedScenario = null) {
   const scenarioElement = {
-    type: ‘multi_static_select’,
+    type: 'multi_static_select',
     action_id: A.INTAKE_SCENARIO,
-    placeholder: { type: ‘plain_text’, text: ‘Choose a situation...’ },
+    placeholder: { type: 'plain_text', text: 'Choose a situation...' },
     options: SCENARIO_NAMES.map(s => ({
-      text: { type: ‘plain_text’, text: s },
+      text: { type: 'plain_text', text: s },
       value: s,
     })),
     ...(preSelectedScenario ? {
-      initial_options: [{ text: { type: ‘plain_text’, text: preSelectedScenario }, value: preSelectedScenario }],
+      initial_options: [{ text: { type: 'plain_text', text: preSelectedScenario }, value: preSelectedScenario }],
     } : {}),
   };
 
@@ -122,67 +122,67 @@ function intakeModal(preSelectedScenario = null) {
         const m = SCENARIO_META[preSelectedScenario] || {};
         const blocks = [
           {
-            type: ‘header’,
-            text: { type: ‘plain_text’, text: `${m.emoji || ‘📋’}  ${preSelectedScenario}`, emoji: true },
+            type: 'header',
+            text: { type: 'plain_text', text: `${m.emoji || '📋'}  ${preSelectedScenario}`, emoji: true },
           },
           {
-            type: ‘context’,
-            elements: [{ type: ‘mrkdwn’, text: `*${m.riskLabel || ‘Moderate Risk’}*  ·  ${m.description || ‘’}` }],
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `*${m.riskLabel || 'Moderate Risk'}*  ·  ${m.description || ''}` }],
           },
         ];
         if (m.examples?.length) {
-          blocks.push({ type: ‘divider’ });
-          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: ‘*COMMON EXAMPLES*’ } });
-          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: m.examples.map(e => `→  ${e}`).join(‘\n’) } });
+          blocks.push({ type: 'divider' });
+          blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*COMMON EXAMPLES*' } });
+          blocks.push({ type: 'section', text: { type: 'mrkdwn', text: m.examples.map(e => `→  ${e}`).join('\n') } });
         }
         if (m.docGuidance?.length) {
-          blocks.push({ type: ‘divider’ });
-          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: ‘*DOCUMENTATION GUIDANCE*’ } });
-          blocks.push({ type: ‘section’, text: { type: ‘mrkdwn’, text: m.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join(‘\n’) } });
+          blocks.push({ type: 'divider' });
+          blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*DOCUMENTATION GUIDANCE*' } });
+          blocks.push({ type: 'section', text: { type: 'mrkdwn', text: m.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n') } });
         }
         if (m.watch) {
-          blocks.push({ type: ‘divider’ });
-          blocks.push({ type: ‘context’, elements: [{ type: ‘mrkdwn’, text: `⚠️  *Watch for:* ${m.watch}` }] });
+          blocks.push({ type: 'divider' });
+          blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${m.watch}` }] });
         }
         if (m.contactHR) {
-          blocks.push({ type: ‘context’, elements: [{ type: ‘mrkdwn’, text: `📞  *Not sure? Contact HR:* ${m.contactHR}` }] });
+          blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${m.contactHR}` }] });
         }
-        blocks.push({ type: ‘divider’ });
+        blocks.push({ type: 'divider' });
         return blocks;
       })()
     : [];
 
   return {
-    type: ‘modal’,
+    type: 'modal',
     callback_id: C.MODAL_INTAKE,
-    title: { type: ‘plain_text’, text: ‘New Check’ },
-    submit: { type: ‘plain_text’, text: ‘Continue’ },
-    close:  { type: ‘plain_text’, text: ‘Cancel’ },
+    title: { type: 'plain_text', text: 'New Check' },
+    submit: { type: 'plain_text', text: 'Continue' },
+    close:  { type: 'plain_text', text: 'Cancel' },
     blocks: [
       ...headerBlocks,
       {
-        type: ‘context’,
-        elements: [{ type: ‘mrkdwn’, text: ‘:bulb:  Leave the note blank for a private self-check. Add a note and HR is automatically notified when you finish.’ }],
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: ':bulb:  Leave the note blank for a private self-check. Add a note and HR is automatically notified when you finish.' }],
       },
-      { type: ‘divider’ },
+      { type: 'divider' },
       {
-        type: ‘input’,
+        type: 'input',
         block_id: B.SCENARIO,
-        label: { type: ‘plain_text’, text: ‘Choose one or multiple scenarios’ },
-        hint: { type: ‘plain_text’, text: ‘Select every scenario that applies. Questions come from the first scenario you pick. Information and documentation guidance will show for all selected scenarios.’ },
+        label: { type: 'plain_text', text: 'Choose one or multiple scenarios' },
+        hint: { type: 'plain_text', text: 'Select every scenario that applies. Questions come from the first scenario you pick. Information and documentation guidance will show for all selected scenarios.' },
         element: scenarioElement,
       },
-      { type: ‘divider’ },
+      { type: 'divider' },
       {
-        type: ‘input’,
+        type: 'input',
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: ‘plain_text’, text: ‘Employee or situation reference (optional)’ },
-        hint: { type: ‘plain_text’, text: ‘Add any note here and HR is automatically notified when you finish. Leave blank to keep this check private to you. HR never sees what you type.’ },
+        label: { type: 'plain_text', text: 'Employee or situation reference (optional)' },
+        hint: { type: 'plain_text', text: 'Add any note here and HR is automatically notified when you finish. Leave blank to keep this check private to you. HR never sees what you type.' },
         element: {
-          type: ‘plain_text_input’,
+          type: 'plain_text_input',
           action_id: A.INTAKE_REF_NAME,
-          placeholder: { type: ‘plain_text’, text: ‘e.g. J.D.’ },
+          placeholder: { type: 'plain_text', text: 'e.g. J.D.' },
           max_length: 80,
         },
       },
@@ -190,7 +190,7 @@ function intakeModal(preSelectedScenario = null) {
   };
 }
 
-// ── Questions modal ──────────────────────────────────────────────────────
+// -- Questions modal ------------------------------------------------------
 
 function questionsModal(scenario, questions, privateMetadata) {
   const criticalCount = questions.filter(q => q.critical).length;
@@ -233,7 +233,7 @@ function questionsModal(scenario, questions, privateMetadata) {
     });
   });
 
-  // ── Watch for / Contact HR at bottom of questions
+  // -- Watch for / Contact HR at bottom of questions
   const meta = SCENARIO_META[scenario];
   if (meta?.watch || meta?.contactHR) {
     blocks.push({ type: 'divider' });
@@ -256,7 +256,7 @@ function questionsModal(scenario, questions, privateMetadata) {
   };
 }
 
-// ── Result DM to manager ─────────────────────────────────────────────────
+// -- Result DM to manager -------------------------------------------------
 // Returns { text, attachments } for chat.postMessage.
 // Uses colored left border to signal risk level visually.
 // Includes next steps so the DM is immediately actionable.
@@ -299,7 +299,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     : 'Your answers indicate this situation is within standard management scope. Document each step you take.';
 
   const blocks = [
-    // ── Header: scenario + status
+    // -- Header: scenario + status
     {
       type: 'section',
       text: {
@@ -309,7 +309,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     },
     { type: 'divider' },
 
-    // ── Risk level + guidance
+    // -- Risk level + guidance
     {
       type: 'section',
       text: {
@@ -319,7 +319,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     },
   ];
 
-  // ── Recommended next steps
+  // -- Recommended next steps
   if (stepList.length > 0) {
     blocks.push({ type: 'divider' });
     blocks.push({
@@ -331,7 +331,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── "Still not sure?" caution (scenario-specific)
+  // -- "Still not sure?" caution (scenario-specific)
   const caution = SCENARIO_CAUTION[scenario];
   if (caution && level !== 'risk') {
     blocks.push({
@@ -340,7 +340,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Scenario meta for ALL selected scenarios
+  // -- Scenario meta for ALL selected scenarios
   scenarios.forEach((s, idx) => {
     const meta = SCENARIO_META[s];
     if (!meta) return;
@@ -366,7 +366,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
   });
 
-  // ── Questions with selected answers in order
+  // -- Questions with selected answers in order
   if (answers.length > 0 && questions.length > 0) {
     const answerLabel = { yes: '✅  Yes', no: '❌  No', unknown: '❓  Not sure' };
     blocks.push({ type: 'divider' });
@@ -385,7 +385,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
 
   blocks.push({ type: 'divider' });
 
-  // ── HR status + primary actions
+  // -- HR status + primary actions
   if (selfCheck) {
     blocks.push({
       type: 'context',
@@ -459,7 +459,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Secondary row: run again, email report, 30-day reminder (reminder only for HR cases)
+  // -- Secondary row: run again, email report, 30-day reminder (reminder only for HR cases)
   const secondaryElements = [
     {
       type: 'button',
@@ -483,7 +483,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
   }
   blocks.push({ type: 'actions', elements: secondaryElements });
 
-  // ── Web handoff callout for high risk / many follow-ups
+  // -- Web handoff callout for high risk / many follow-ups
   if ((level === 'risk' || followupCount >= 3) && hrNotified) {
     blocks.push({ type: 'divider' });
     blocks.push({
@@ -508,7 +508,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
   };
 }
 
-// ── HR triage message ────────────────────────────────────────────────────
+// -- HR triage message ----------------------------------------------------
 // Posted to PAC_HR_CHANNEL_ID. Employee identity NEVER included.
 // Uses colored border + overflow menu for secondary actions.
 
@@ -522,7 +522,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
   });
 
   const blocks = [
-    // ── Case header
+    // -- Case header
     {
       type: 'section',
       text: {
@@ -541,7 +541,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
     blocks.push({ type: 'divider' });
   }
 
-  // ── Full Q&A
+  // -- Full Q&A
   if (questions.length > 0) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*MANAGER\'S ANSWERS*' } });
     const ansLabel = { yes: '✅  Yes', no: '❌  No', unknown: '❓  Not sure' };
@@ -565,7 +565,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
     blocks.push({ type: 'divider' });
   }
 
-  // ── Uploaded documents
+  // -- Uploaded documents
   if (attachments.length > 0) {
     blocks.push({
       type: 'section',
@@ -577,7 +577,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
     blocks.push({ type: 'divider' });
   }
 
-  // ── Scenario guidance for ALL selected scenarios
+  // -- Scenario guidance for ALL selected scenarios
   scenarios.forEach((s, idx) => {
     const sm = SCENARIO_META[s];
     if (!sm) return;
@@ -598,7 +598,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
     });
   }
 
-  // ── Actions
+  // -- Actions
   const actionElements = buildHrActions(state, caseId);
   if (actionElements.length > 0) {
     blocks.push({ type: 'actions', block_id: B.HR_ACTIONS, elements: actionElements });
@@ -692,13 +692,13 @@ function buildHrActions(state, caseId) {
   return [webBtn];
 }
 
-// ── App Home tab ─────────────────────────────────────────────────────────
+// -- App Home tab ---------------------------------------------------------
 // Enterprise dashboard surface. Published via views.publish.
 // Shows active cases, quick start, and how-it-works.
 
 function homeTabView(cases = []) {
   const blocks = [
-    // ── Masthead
+    // -- Masthead
     {
       type: 'header',
       text: { type: 'plain_text', text: '🛡️  People Action Check', emoji: true },
@@ -731,7 +731,7 @@ function homeTabView(cases = []) {
       ],
     },
     { type: 'divider' },
-    // ── How to use
+    // -- How to use
     {
       type: 'header',
       text: { type: 'plain_text', text: 'How to Use', emoji: true },
@@ -746,7 +746,7 @@ function homeTabView(cases = []) {
     { type: 'divider' },
   ];
 
-  // ── Scenario cards — each is its own entry point
+  // -- Scenario cards — each is its own entry point
   blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Select a Scenario to Start a Check', emoji: true } });
   blocks.push({
     type: 'context',
@@ -772,7 +772,7 @@ function homeTabView(cases = []) {
 
   blocks.push({ type: 'divider' });
 
-  // ── Session history (bottom)
+  // -- Session history (bottom)
   const today = new Date().toISOString().slice(0, 10);
 
   // Follow-up reminders first if any are due
@@ -851,7 +851,7 @@ function homeTabView(cases = []) {
   return { type: 'home', blocks };
 }
 
-// ── HR compose modal ─────────────────────────────────────────────────────
+// -- HR compose modal -----------------------------------------------------
 
 function hrReplyModal(caseId, title = 'Send Message to Manager') {
   return {
@@ -886,7 +886,7 @@ function hrReplyModal(caseId, title = 'Send Message to Manager') {
   };
 }
 
-// ── HR resolve modal ─────────────────────────────────────────────────────
+// -- HR resolve modal -----------------------------------------------------
 
 function hrResolveModal(caseId) {
   return {
@@ -918,7 +918,7 @@ function hrResolveModal(caseId) {
   };
 }
 
-// ── Manager follow-up DM ─────────────────────────────────────────────────
+// -- Manager follow-up DM -------------------------------------------------
 
 function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level }) {
   const risk = r(level || 'good');
@@ -956,7 +956,7 @@ function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level 
   };
 }
 
-// ── Manager reply modal ──────────────────────────────────────────────────
+// -- Manager reply modal --------------------------------------------------
 
 function managerReplyModal(caseId, scenario) {
   return {
@@ -989,9 +989,9 @@ function managerReplyModal(caseId, scenario) {
   };
 }
 
-// ── Case list (DM or Home) ────────────────────────────────────────────────
+// -- Case list (DM or Home) ------------------------------------------------
 
-// ── HR reassign modal ────────────────────────────────────────────────────
+// -- HR reassign modal ----------------------------------------------------
 // HR picks a new manager via Slack user picker. Only shown for active cases.
 
 function hrReassignModal(caseId, scenario, currentManagerId) {
@@ -1038,7 +1038,7 @@ function hrReassignModal(caseId, scenario, currentManagerId) {
   };
 }
 
-// ── Reassigned case DM ───────────────────────────────────────────────────
+// -- Reassigned case DM ---------------------------------------------------
 // Sent to the new manager when HR reassigns an active case to them.
 
 function caseReassignedDmMessage({ caseId, scenario, level, state, previousManagerId, hrNote }) {
@@ -1115,7 +1115,7 @@ function caseListBlocks(cases) {
   return blocks;
 }
 
-// ── Handoff ───────────────────────────────────────────────────────────────
+// -- Handoff ---------------------------------------------------------------
 
 function handoffBlocks({ caseId, reason }) {
   const msgs = {
@@ -1142,7 +1142,7 @@ function handoffBlocks({ caseId, reason }) {
   ];
 }
 
-// ── Export modal ──────────────────────────────────────────────────────────
+// -- Export modal ----------------------------------------------------------
 
 function exportModal({ isHr = false } = {}) {
   const filterOptions = [
@@ -1221,7 +1221,7 @@ function exportModal({ isHr = false } = {}) {
   };
 }
 
-// ── HR Policy Library modal ──────────────────────────────────────────────
+// -- HR Policy Library modal ----------------------------------------------
 // HR-only surface. Allows uploading company policy documents (PDF/Word)
 // tied to a scenario. Stored in Netlify Blobs under key pac_policies.
 // Uploaded files are referenced in scenario guidance for managers.
@@ -1321,7 +1321,7 @@ function hrPolicyLibraryModal(existingPolicies = []) {
   };
 }
 
-// ── Manager document upload modal ────────────────────────────────────────
+// -- Manager document upload modal ----------------------------------------
 // existingDocs: array of { name, permalink } already attached to the case.
 
 function uploadDocModal(caseId, existingDocs = []) {
@@ -1374,7 +1374,7 @@ function uploadDocModal(caseId, existingDocs = []) {
   };
 }
 
-// ── Case full export message ─────────────────────────────────────────────
+// -- Case full export message ---------------------------------------------
 // Sent as a DM to the manager when they click View on a session history entry.
 // Contains everything: scenario info, risk, Q&A, next steps, docs, case ID.
 
