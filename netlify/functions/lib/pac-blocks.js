@@ -734,7 +734,7 @@ function homeTabView(cases = []) {
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Company Policies', emoji: true },
+          text: { type: 'plain_text', text: 'Company Policies for Your Guidance', emoji: true },
           action_id: A.SLASH_OPEN_POLICIES,
           style: 'primary',
         },
