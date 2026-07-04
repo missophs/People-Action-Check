@@ -34,6 +34,7 @@ const {
   hrReassignModal,
   caseReassignedDmMessage,
   caseListBlocks,
+  caseFullExportMessage,
   handoffBlocks,
   exportModal,
   hrPolicyLibraryModal,
@@ -243,6 +244,15 @@ async function handleBlockActions(payload) {
     const store = hrConfigStore();
     const existing = (await store.get('pac_policies', { type: 'json' })) || [];
     await openModal(triggerId, hrPolicyLibraryModal(existing));
+    return ack();
+  }
+
+  if (actionId === A.SLASH_VIEW_CASE) {
+    const caseId = action.value;
+    const rec = await findCaseById(caseId);
+    if (!rec || rec.managerId !== userId) return ack();
+    const questions = SCENARIO_QUESTIONS[rec.scenario] || [];
+    await postMessage(userId, caseFullExportMessage(rec, questions));
     return ack();
   }
 

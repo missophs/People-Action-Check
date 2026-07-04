@@ -222,13 +222,12 @@ function questionsModal(scenario, questions, privateMetadata) {
         hint: { type: 'plain_text', text: 'Critical — No or Don\'t know raises this to High Risk.' },
       } : {}),
       element: {
-        type: 'static_select',
+        type: 'radio_buttons',
         action_id: `${A.Q_ANSWER_PREFIX}${i}`,
-        placeholder: { type: 'plain_text', text: 'Choose an answer...' },
         options: [
-          { text: { type: 'plain_text', text: 'Yes'        }, value: 'yes'     },
-          { text: { type: 'plain_text', text: 'No'         }, value: 'no'      },
-          { text: { type: 'plain_text', text: "Not sure"   }, value: 'unknown' },
+          { text: { type: 'plain_text', text: 'Yes'      }, value: 'yes'     },
+          { text: { type: 'plain_text', text: 'No'       }, value: 'no'      },
+          { text: { type: 'plain_text', text: 'Not sure' }, value: 'unknown' },
         ],
       },
     });
@@ -646,13 +645,7 @@ function homeTabView(cases = []) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: 'A structured HR risk check before you act on an employee situation. Answer 5 questions, get a risk level (Low / Elevated / High), and recommended next steps.\n\n*Leave the reference blank for a private self-check. Add a note and HR is automatically notified when you finish.*',
-      },
-      accessory: {
-        type: 'button',
-        text: { type: 'plain_text', text: 'Start a Check', emoji: true },
-        style: 'primary',
-        action_id: A.SLASH_OPEN_INTAKE,
+        text: 'A structured HR risk check before you act on an employee situation. Get a risk level (Low / Elevated / High) and recommended next steps in under 2 minutes.\n\n*To start a check, pick the scenario that best fits your situation from the list below.*',
       },
     },
     {
@@ -679,72 +672,23 @@ function homeTabView(cases = []) {
     // ── How to use
     {
       type: 'header',
-      text: { type: 'plain_text', text: 'How to Use People Action Check', emoji: true },
+      text: { type: 'plain_text', text: 'How to Use', emoji: true },
     },
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: '*1.*  Pick a scenario — tap any card below or use "Start a Check."\n*2.*  Add a reference (optional) — initials keep a case findable later. Leave blank = private self-check only. HR is notified only when you add a note.\n*3.*  Answer 4–6 questions honestly. Your answers determine the risk level and recommended steps.\n*4.*  Get your result — Low, Moderate, or High Risk — with next steps, documentation tips, and options to attach files or email yourself a copy.\n\n_⚠️  This tool provides general HR guidance — not legal advice. For High Risk situations or formal complaints, consult HR directly._',
+        text: '*1.*  Pick the scenario below that matches your situation — that opens the check.\n*2.*  Add a reference (optional) — initials or a short note. Leave blank = private self-check. Add a note and HR is automatically notified when you finish.\n*3.*  Answer 4–6 questions honestly. Your answers determine the risk level.\n*4.*  Get your result with next steps, documentation guidance, and options to attach files or email a copy to yourself.\n\n_⚠️  General HR guidance only — not legal advice. For High Risk situations or formal complaints, contact HR directly._',
       },
     },
     { type: 'divider' },
   ];
 
-  // ── Follow-up reminders (cases with a followupDate set)
-  const today = new Date().toISOString().slice(0, 10);
-  const followups = cases.filter(c => c.followupDate && c.followupDate <= today && c.state !== 'CLOSED' && c.state !== 'ARCHIVED');
-  if (followups.length > 0) {
-    blocks.push({ type: 'header', text: { type: 'plain_text', text: '📅 Follow-up Reminders' } });
-    followups.forEach(c => {
-      const risk = r(c.risk || 'good');
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*${c.refName ? `  ·  ${c.refName}` : ''}\nReview progress  ·  \`${c.id}\``,
-        },
-        accessory: {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
-          action_id: A.RESULT_OPEN_WEB,
-          value: c.id,
-        },
-      });
-    });
-    blocks.push({ type: 'divider' });
-  }
-
-  // ── Case history
-  if (cases.length > 0) {
-    blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Recent Checks' } });
-    cases.slice(0, 5).forEach(c => {
-      const risk = r(c.risk || 'good');
-      const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const ref  = c.refName ? `  ·  ${c.refName}` : '  ·  _Self-check_';
-      const followupNote = c.followupDate && c.followupDate > today ? `  ·  📅 ${c.followupDate}` : '';
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`${followupNote}`,
-        },
-      });
-    });
-    if (cases.length > 5) {
-      blocks.push({
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: `+${cases.length - 5} more — open the web app to see all.` }],
-      });
-    }
-    blocks.push({ type: 'divider' });
-  }
-
   // ── Scenario cards — each is its own entry point
-  blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Select a Scenario' } });
+  blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Select a Scenario to Start a Check', emoji: true } });
   blocks.push({
     type: 'context',
-    elements: [{ type: 'mrkdwn', text: 'Tap a scenario to start a check for that situation. Each has its own questions, examples, and documentation guidance.' }],
+    elements: [{ type: 'mrkdwn', text: 'Tap the scenario that best fits your situation. Each one opens a tailored check with its own questions, examples, and documentation guidance.' }],
   });
 
   SCENARIO_NAMES.forEach(name => {
@@ -753,7 +697,7 @@ function homeTabView(cases = []) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${meta.emoji || '📋'}  *${name}*\n${meta.description ? meta.description.split('.')[0] + '.' : ''}`,
+        text: `${meta.emoji || '📋'}  *${name}*  ·  _${meta.riskLabel || 'Moderate Risk'}_\n${meta.description ? meta.description.split('.')[0] + '.' : ''}`,
       },
       accessory: {
         type: 'button',
@@ -763,6 +707,73 @@ function homeTabView(cases = []) {
       },
     });
   });
+
+  blocks.push({ type: 'divider' });
+
+  // ── Session history (bottom)
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Follow-up reminders first if any are due
+  const followups = cases.filter(c => c.followupDate && c.followupDate <= today && c.state !== 'CLOSED' && c.state !== 'ARCHIVED');
+  if (followups.length > 0) {
+    blocks.push({ type: 'header', text: { type: 'plain_text', text: '📅  Follow-up Reminders Due', emoji: true } });
+    followups.forEach(c => {
+      const risk = r(c.risk || 'good');
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${risk.emoji}  *${c.scenario}*${c.refName ? `  ·  ${c.refName}` : ''}\nSet for ${c.followupDate}  ·  \`${c.id}\``,
+        },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'View Case', emoji: true },
+          action_id: A.SLASH_VIEW_CASE,
+          value: c.id,
+        },
+      });
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // Session history
+  blocks.push({ type: 'header', text: { type: 'plain_text', text: '📂  Your Session History', emoji: true } });
+  if (cases.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_No checks yet. Pick a scenario above to start your first one._' },
+    });
+  } else {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: 'All your checks are saved here — including questions, answers, and any documents you uploaded. Click View to see the full record or export it.' }],
+    });
+    cases.slice(0, 10).forEach(c => {
+      const risk = r(c.risk || 'good');
+      const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const ref  = c.refName ? `  ·  ${c.refName}` : '  ·  _Private self-check_';
+      const docsNote = c.attachments?.length ? `  ·  📎 ${c.attachments.length} file${c.attachments.length > 1 ? 's' : ''}` : '';
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}${docsNote}  ·  \`${c.id}\``,
+        },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'View', emoji: true },
+          action_id: A.SLASH_VIEW_CASE,
+          value: c.id,
+        },
+      });
+    });
+    if (cases.length > 10) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `+${cases.length - 10} older checks — open the web app to see your full history.` }],
+      });
+    }
+  }
 
   blocks.push({ type: 'divider' });
   blocks.push({
@@ -1294,6 +1305,117 @@ function uploadDocModal(caseId, existingDocs = []) {
   };
 }
 
+// ── Case full export message ─────────────────────────────────────────────
+// Sent as a DM to the manager when they click View on a session history entry.
+// Contains everything: scenario info, risk, Q&A, next steps, docs, case ID.
+
+function caseFullExportMessage(rec, questions) {
+  const risk       = r(rec.risk || 'good');
+  const meta       = SCENARIO_META[rec.scenario] || {};
+  const date       = new Date(rec.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const answers    = rec.answers || [];
+  const nextSteps  = (NEXT_STEPS[rec.scenario] || {})[rec.risk || 'good'] || [];
+  const attachments = rec.attachments || [];
+
+  const blocks = [
+    { type: 'header', text: { type: 'plain_text', text: `${meta.emoji || '📋'}  ${rec.scenario}`, emoji: true } },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          `*Case ID:*  \`${rec.id}\``,
+          `*Date:*  ${date}`,
+          `*Risk Level:*  ${risk.emoji}  *${risk.label.toUpperCase()}*`,
+          rec.refName ? `*Reference:*  ${rec.refName}` : `*Type:*  Private self-check`,
+          `*Status:*  ${stateLabel(rec.state)}`,
+          rec.hrNotified ? `*HR Notified:*  ✅  Yes` : `*HR Notified:*  No`,
+        ].join('\n'),
+      },
+    },
+    { type: 'divider' },
+    { type: 'section', text: { type: 'mrkdwn', text: `*ABOUT THIS SCENARIO*\n${meta.description || ''}` } },
+  ];
+
+  // Q&A
+  if (questions?.length) {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*YOUR ANSWERS*' } });
+    const ansLabel = { yes: '✅  Yes', no: '❌  No', unknown: '❓  Not sure' };
+    questions.forEach((q, i) => {
+      const ans = answers[i];
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${i + 1}.${q.critical ? '  ⚠️' : ''}  ${q.q}*\n${ansLabel[ans] || '—'}${q.hint ? `\n_${q.hint}_` : ''}`,
+        },
+      });
+    });
+    const yesCount = answers.filter(a => a === 'yes').length;
+    const noCount  = answers.filter(a => a === 'no').length;
+    const unkCount = answers.filter(a => a === 'unknown').length;
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `✅  ${yesCount} Yes   ❌  ${noCount} No   ❓  ${unkCount} Not sure` }],
+    });
+  }
+
+  // Next steps
+  if (nextSteps.length) {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*RECOMMENDED NEXT STEPS*\n${nextSteps.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}` } });
+  }
+
+  // Documentation guidance
+  if (meta.docGuidance?.length) {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}` } });
+  }
+
+  // Watch for / Contact HR
+  if (meta.watch || meta.contactHR) {
+    blocks.push({ type: 'divider' });
+    if (meta.watch)    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+    if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+  }
+
+  // Uploaded documents
+  if (attachments.length) {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.permalink}|${a.name}>`).join('\n')}` } });
+  } else {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '📎  No documents uploaded for this case.' }] });
+  }
+
+  // Export action
+  blocks.push({ type: 'divider' });
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '✉  Email This to Me', emoji: true },
+        action_id: A.RESULT_EMAIL_SELF,
+        value: rec.id,
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '📎  Attach Files', emoji: true },
+        action_id: A.RESULT_UPLOAD_DOC,
+        value: rec.id,
+      },
+    ],
+  });
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: `Case exported  ·  ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}  ·  People Action Check` }],
+  });
+
+  return { text: `Case export: ${rec.scenario} — ${rec.id}`, blocks };
+}
+
 module.exports = {
   computeScore,
   r,
@@ -1315,4 +1437,5 @@ module.exports = {
   exportModal,
   hrPolicyLibraryModal,
   uploadDocModal,
+  caseFullExportMessage,
 };

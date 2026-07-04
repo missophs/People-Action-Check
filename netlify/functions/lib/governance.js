@@ -14,6 +14,7 @@ const ACTION_IDS = {
   SLASH_OPEN_INTAKE:        'pac_slash_open_intake',
   SLASH_OPEN_SCENARIO:      'pac_slash_open_scenario',
   SLASH_OPEN_POLICIES:      'pac_slash_open_policies',
+  SLASH_VIEW_CASE:          'pac_slash_view_case',
   SLASH_LIST_CASES:         'pac_slash_list_cases',
   SLASH_HR_CASES:           'pac_slash_hr_cases',
   SLASH_EXPORT_CASES:       'pac_slash_export_cases',
