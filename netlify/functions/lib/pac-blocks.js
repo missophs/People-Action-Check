@@ -61,10 +61,14 @@ function computeScore(questions, answers) {
 function slashResponseBlocks() {
   return [
     {
+      type: 'header',
+      text: { type: 'plain_text', text: 'People Action Check', emoji: true },
+    },
+    {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: '*People Action Check*\nStructured HR risk guidance before you act on an employee situation.',
+        text: 'Structured HR risk guidance before you act on an employee situation. Private to you — results are never shared to the channel.',
       },
       accessory: {
         type: 'button',
@@ -74,6 +78,10 @@ function slashResponseBlocks() {
       },
     },
     { type: 'divider' },
+    {
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: '*Quick access*' }],
+    },
     {
       type: 'actions',
       elements: [
@@ -101,45 +109,50 @@ function slashResponseBlocks() {
 
 function intakeModal() {
   return {
-    type: 'modal',
+    type: ‘modal’,
     callback_id: C.MODAL_INTAKE,
-    title: { type: 'plain_text', text: 'People Action Check' },
-    submit: { type: 'plain_text', text: 'Continue' },
-    close:  { type: 'plain_text', text: 'Cancel' },
+    title: { type: ‘plain_text’, text: ‘People Action Check’ },
+    submit: { type: ‘plain_text’, text: ‘Continue’ },
+    close:  { type: ‘plain_text’, text: ‘Cancel’ },
     blocks: [
       {
-        type: 'section',
+        type: ‘section’,
         text: {
-          type: 'mrkdwn',
-          text: '*What situation are you navigating?*\nSelect the scenario that best describes the employee situation you are reviewing.',
+          type: ‘mrkdwn’,
+          text: ‘*What situation are you navigating?*\nAnswer 5 risk questions and get your risk level with recommended next steps in under 2 minutes.’,
         },
       },
-      { type: 'divider' },
       {
-        type: 'input',
+        type: ‘context’,
+        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private to you. Results are never posted to any channel.’ }],
+      },
+      { type: ‘divider’ },
+      {
+        type: ‘input’,
         block_id: B.SCENARIO,
-        label: { type: 'plain_text', text: 'Scenario(s)' },
-        hint: { type: 'plain_text', text: 'Select all that apply. Questions will be drawn from the primary (first) scenario selected.' },
+        label: { type: ‘plain_text’, text: ‘Scenario’, emoji: true },
+        hint: { type: ‘plain_text’, text: ‘Select all that apply. Questions will be drawn from the primary (first) scenario selected.’ },
         element: {
-          type: 'multi_static_select',
+          type: ‘multi_static_select’,
           action_id: A.INTAKE_SCENARIO,
-          placeholder: { type: 'plain_text', text: 'Choose one or more scenarios…' },
+          placeholder: { type: ‘plain_text’, text: ‘Choose one or more scenarios...’ },
           options: SCENARIO_NAMES.map(s => ({
-            text: { type: 'plain_text', text: s },
+            text: { type: ‘plain_text’, text: s },
             value: s,
           })),
         },
       },
+      { type: ‘divider’ },
       {
-        type: 'input',
+        type: ‘input’,
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: 'plain_text', text: 'Leave blank for a private self-check. Add a note if you may escalate to HR.' },
-        hint: { type: 'plain_text', text: 'A note here does not notify HR by itself — it just keeps that option open later and helps you find this case again. Never shown to HR.' },
+        label: { type: ‘plain_text’, text: ‘Employee reference (optional)’, emoji: true },
+        hint: { type: ‘plain_text’, text: ‘A private code only you will see (e.g. initials). Required if you may escalate to HR. Never shared.’ },
         element: {
-          type: 'plain_text_input',
+          type: ‘plain_text_input’,
           action_id: A.INTAKE_REF_NAME,
-          placeholder: { type: 'plain_text', text: 'e.g. J.D. or any short code you’ll recognize' },
+          placeholder: { type: ‘plain_text’, text: ‘e.g. J.D. or any short code you will recognize’ },
           max_length: 80,
         },
       },
