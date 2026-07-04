@@ -36,6 +36,7 @@ const {
   caseListBlocks,
   handoffBlocks,
   exportModal,
+  hrPolicyLibraryModal,
 } = require('./lib/pac-blocks');
 
 const { hrConfigStore } = require('./lib/blob-store');
@@ -45,6 +46,38 @@ const { ACTION_IDS: A, CALLBACK_IDS: C, BLOCK_IDS: B, AUDIT_EVENTS: E } = requir
 async function getHrEmail() {
   const store = hrConfigStore();
   return (await store.get('hrEmail')) || '';
+}
+
+// ── Policy library helpers ────────────────────────────────────────────────
+// Policies stored in Netlify Blobs under key 'pac_policies' as a JSON array.
+// Each entry: { id, name, scenario, fileId, fileName, uploadedAt, uploadedBy }
+
+async function loadPolicies() {
+  try {
+    const store = hrConfigStore();
+    const raw = await store.get('pac_policies');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+async function savePolicy(entry) {
+  const store = hrConfigStore();
+  const existing = await loadPolicies();
+  existing.push(entry);
+  await store.set('pac_policies', JSON.stringify(existing));
+}
+
+async function removePolicy(policyId) {
+  const store = hrConfigStore();
+  const existing = await loadPolicies();
+  await store.set('pac_policies', JSON.stringify(existing.filter(p => p.id !== policyId)));
+}
+
+// ── Slack modal update helper ─────────────────────────────────────────────
+
+async function updateModal(viewId, view) {
+  if (!viewId) return;
+  await slackApi('views.update', { view_id: viewId, view });
 }
 
 // Look up a Slack user's email address (requires users:read.email scope)
@@ -366,6 +399,20 @@ async function handleBlockActions(payload) {
       await openModal(payload.trigger_id, hrReassignModal(caseId, rec.scenario, rec.managerId));
       return ack();
     }
+    if (overflowAction === A.HR_POLICY_LIBRARY) {
+      const existing = await loadPolicies();
+      await openModal(triggerId, hrPolicyLibraryModal(existing));
+      return ack();
+    }
+    return ack();
+  }
+
+  // HR policy library direct button
+  if (actionId === A.HR_REMOVE_POLICY) {
+    const policyId = action.value;
+    await removePolicy(policyId);
+    const existing = await loadPolicies();
+    await updateModal(payload.view?.id, hrPolicyLibraryModal(existing));
     return ack();
   }
 
@@ -859,6 +906,30 @@ async function handleViewSubmission(payload) {
   }
 
   // pac_modal_export_cases → generate download link or email the file
+  if (callbackId === C.MODAL_POLICY_LIBRARY) {
+    const name     = values?.[B.POLICY_NAME]?.[A.POLICY_NAME_INPUT]?.value?.trim() || '';
+    const scenario = values?.[B.POLICY_SCENARIO]?.[A.POLICY_SCENARIO_SELECT]?.selected_option?.value || '';
+    const files    = values?.[B.POLICY_FILE]?.[A.POLICY_FILE]?.files || [];
+
+    if (!name || !scenario) {
+      return ack({ response_action: 'errors', errors: {
+        [B.POLICY_NAME]:     !name     ? 'Policy name is required.' : undefined,
+        [B.POLICY_SCENARIO]: !scenario ? 'Select a scenario.'       : undefined,
+      }});
+    }
+
+    const fileRef = files[0] ? { fileId: files[0].id, fileName: files[0].name } : {};
+    await savePolicy({
+      id:         `pol_${Date.now()}`,
+      name,
+      scenario,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: userId,
+      ...fileRef,
+    });
+    return ack();
+  }
+
   if (callbackId === C.MODAL_EXPORT_CASES) {
     const isHr   = payload.view.private_metadata === 'hr';
     const format  = values?.[B.EXPORT_FORMAT]?.[A.EXPORT_FORMAT]?.selected_option?.value || 'csv';

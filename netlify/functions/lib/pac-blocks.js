@@ -410,10 +410,13 @@ function buildHrActions(state, caseId) {
   const reassignOpt = { text: { type: 'plain_text', text: '🔄  Reassign to another manager' }, value: `${A.HR_REASSIGN}::${caseId}` };
 
   // Overflow options available at each state
+  const policyOpt = { text: { type: 'plain_text', text: '📎  Upload company policy' }, value: `${A.HR_POLICY_LIBRARY}::${caseId}` };
+
   const overflowOptionsByState = {
     SUBMITTED: [
       { text: { type: 'plain_text', text: '📋  Claim this case' }, value: `${A.HR_CLAIM}::${caseId}` },
       reassignOpt,
+      policyOpt,
       { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
     ACKNOWLEDGED: [
@@ -421,6 +424,7 @@ function buildHrActions(state, caseId) {
       { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `${A.HR_REQUEST_INFO}::${caseId}` },
       { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `${A.HR_ESCALATE}::${caseId}` },
       reassignOpt,
+      policyOpt,
       { text: { type: 'plain_text', text: '✅  Close case' },                value: `${A.HR_CLOSE}::${caseId}` },
       { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
@@ -429,10 +433,12 @@ function buildHrActions(state, caseId) {
       { text: { type: 'plain_text', text: 'ℹ️  Request more information' },  value: `${A.HR_REQUEST_INFO}::${caseId}` },
       { text: { type: 'plain_text', text: '⬆️  Escalate this case' },        value: `${A.HR_ESCALATE}::${caseId}` },
       reassignOpt,
+      policyOpt,
       { text: { type: 'plain_text', text: '🌐  Open in Web App' },           value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
     ESCALATED: [
       reassignOpt,
+      policyOpt,
       { text: { type: 'plain_text', text: '🌐  Open in Web App' }, value: `${A.HR_OPEN_WEB}::${caseId}` },
     ],
   };
@@ -911,6 +917,106 @@ function exportModal({ isHr = false } = {}) {
   };
 }
 
+// ── HR Policy Library modal ──────────────────────────────────────────────
+// HR-only surface. Allows uploading company policy documents (PDF/Word)
+// tied to a scenario. Stored in Netlify Blobs under key pac_policies.
+// Uploaded files are referenced in scenario guidance for managers.
+// Employee identity is never involved — this is admin-level configuration.
+
+function hrPolicyLibraryModal(existingPolicies = []) {
+  const policyRows = existingPolicies.length > 0
+    ? existingPolicies.map(p => ({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${p.name}*\n_${p.scenario}_  ·  Uploaded ${new Date(p.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Remove' },
+          style: 'danger',
+          action_id: A.HR_REMOVE_POLICY,
+          value: p.id,
+          confirm: {
+            title: { type: 'plain_text', text: 'Remove policy?' },
+            text: { type: 'mrkdwn', text: `Remove *${p.name}* from the policy library?` },
+            confirm: { type: 'plain_text', text: 'Remove' },
+            deny: { type: 'plain_text', text: 'Keep' },
+          },
+        },
+      }))
+    : [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: '_No policies uploaded yet._' },
+      }];
+
+  return {
+    type: 'modal',
+    callback_id: C.MODAL_POLICY_LIBRARY,
+    title: { type: 'plain_text', text: 'Policy Library' },
+    submit: { type: 'plain_text', text: 'Save Policy' },
+    close:  { type: 'plain_text', text: 'Done' },
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: 'Upload your company\'s written policies so managers can reference them when running a check. HR admins only.',
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'input',
+        block_id: B.POLICY_NAME,
+        label: { type: 'plain_text', text: 'Policy name' },
+        hint: { type: 'plain_text', text: 'e.g. Progressive Discipline Policy, Anti-Harassment Policy' },
+        element: {
+          type: 'plain_text_input',
+          action_id: A.POLICY_NAME_INPUT,
+          placeholder: { type: 'plain_text', text: 'Enter a clear, recognizable name' },
+          max_length: 120,
+        },
+      },
+      {
+        type: 'input',
+        block_id: B.POLICY_SCENARIO,
+        label: { type: 'plain_text', text: 'Scenario this covers' },
+        hint: { type: 'plain_text', text: 'Managers will see this policy linked when they run a check for this scenario.' },
+        element: {
+          type: 'static_select',
+          action_id: A.POLICY_SCENARIO_SELECT,
+          placeholder: { type: 'plain_text', text: 'Choose a scenario...' },
+          options: [
+            ...require('./pac-data').SCENARIO_NAMES.map(s => ({
+              text: { type: 'plain_text', text: s },
+              value: s,
+            })),
+            { text: { type: 'plain_text', text: 'All scenarios' }, value: '__all__' },
+          ],
+        },
+      },
+      {
+        type: 'input',
+        block_id: B.POLICY_FILE,
+        label: { type: 'plain_text', text: 'Upload file (PDF or Word)' },
+        hint: { type: 'plain_text', text: 'Max 10 MB. File is stored securely and referenced by case ID only.' },
+        element: {
+          type: 'file_input',
+          action_id: A.POLICY_FILE,
+          filetypes: ['pdf', 'doc', 'docx'],
+          max_files: 1,
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: 'Current policies' },
+      },
+      ...policyRows,
+    ],
+  };
+}
+
 module.exports = {
   computeScore,
   r,
@@ -930,4 +1036,5 @@ module.exports = {
   caseListBlocks,
   handoffBlocks,
   exportModal,
+  hrPolicyLibraryModal,
 };

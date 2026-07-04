@@ -47,6 +47,14 @@ const ACTION_IDS = {
   HR_MESSAGE_INPUT:         'pac_hr_message_input',
   HR_RESOLUTION_INPUT:      'pac_hr_resolution_input',
 
+  // HR policy library
+  HR_POLICY_LIBRARY:        'pac_hr_policy_library',
+  HR_UPLOAD_POLICY:         'pac_hr_upload_policy',
+  HR_REMOVE_POLICY:         'pac_hr_remove_policy',
+  POLICY_NAME_INPUT:        'pac_policy_name_input',
+  POLICY_SCENARIO_SELECT:   'pac_policy_scenario_select',
+  POLICY_FILE:              'pac_policy_file',
+
   // HR reassign modal
   REASSIGN_MANAGER_SELECT:  'pac_reassign_manager_select',
   REASSIGN_NOTE_INPUT:      'pac_reassign_note_input',
@@ -77,6 +85,9 @@ const BLOCK_IDS = {
   NEW_MANAGER:          'pac_block_new_manager',
   REASSIGN_NOTE:        'pac_block_reassign_note',
   DOC_UPLOAD:           'pac_block_doc_upload',
+  POLICY_NAME:          'pac_block_policy_name',
+  POLICY_SCENARIO:      'pac_block_policy_scenario',
+  POLICY_FILE:          'pac_block_policy_file',
   EXPORT_FORMAT:        'export_format',
   EXPORT_FILTER:        'export_filter',
   EXPORT_DELIVERY:      'export_delivery',
@@ -93,6 +104,7 @@ const CALLBACK_IDS = {
   MODAL_MGR_REPLY:      'pac_modal_mgr_reply',
   MODAL_EXPORT_CASES:   'pac_modal_export_cases',
   MODAL_UPLOAD_DOC:     'pac_modal_upload_doc',
+  MODAL_POLICY_LIBRARY: 'pac_modal_policy_library',
 };
 
 // ── Surface rules ─────────────────────────────────────────────────────────
