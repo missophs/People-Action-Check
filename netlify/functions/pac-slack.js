@@ -160,6 +160,47 @@ async function postEphemeral(channel, userId, blocks, text = 'People Action Chec
   return slackApi('chat.postEphemeral', { channel, user: userId, blocks, text });
 }
 
+// Upload a text/CSV file natively to a Slack channel using files.getUploadURLExternal + files.completeUploadExternal
+async function uploadFileToChannel(channel, filename, content, initialComment = '') {
+  const token = process.env.PAC_SLACK_BOT_TOKEN;
+  if (!token) return null;
+
+  try {
+    // Step 1: get an upload URL
+    const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ filename, length: Buffer.byteLength(content, 'utf8') }),
+    });
+    const urlData = await urlRes.json();
+    if (!urlData.ok) { console.error('files.getUploadURLExternal error:', urlData.error); return null; }
+
+    // Step 2: PUT the file content
+    await fetch(urlData.upload_url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: content,
+    });
+
+    // Step 3: complete the upload and share to channel
+    const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        files: [{ id: urlData.file_id }],
+        channel_id: channel,
+        initial_comment: initialComment,
+      }),
+    });
+    const completeData = await completeRes.json();
+    if (!completeData.ok) console.error('files.completeUploadExternal error:', completeData.error);
+    return completeData;
+  } catch (e) {
+    console.error('uploadFileToChannel error:', e.message);
+    return null;
+  }
+}
+
 async function publishHomeTab(userId) {
   const cases = await listCasesForManager(userId);
   cases.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
@@ -990,6 +1031,45 @@ async function handleViewSubmission(payload) {
     const filter  = isHr ? (values?.[B.EXPORT_FILTER]?.[A.EXPORT_FILTER]?.selected_option?.value || 'all') : 'manager';
     const delivery = values?.[B.EXPORT_DELIVERY]?.[A.EXPORT_DELIVERY]?.selected_option?.value || 'link';
     const emailInput = values?.[B.EXPORT_EMAIL]?.[A.EXPORT_EMAIL]?.value?.trim() || '';
+
+    // ── HR "Post to Slack HR channel" delivery ────────────────────────────
+    if (delivery === 'slack_channel' && isHr) {
+      const hrChannelId = process.env.PAC_HR_CHANNEL_ID;
+      if (!hrChannelId) {
+        await postMessage(userId, [{ type: 'section', text: { type: 'mrkdwn', text: 'PAC_HR_CHANNEL_ID is not configured. Cannot post to channel.' } }]);
+        return ack('');
+      }
+
+      let cases = await listAllCases().catch(() => []);
+      if (filter === 'hr')   cases = cases.filter(c => c.hrNotified);
+      if (filter === 'open') cases = cases.filter(c => !['CLOSED', 'ARCHIVED'].includes(c.state));
+
+      // Build CSV: one row per case, Q&A columns expand per answer index
+      const maxQ = cases.reduce((m, c) => Math.max(m, (c.questions || []).length), 0);
+      const qHeaders = Array.from({ length: maxQ }, (_, i) => `Q${i + 1},A${i + 1}`).join(',');
+      const header = `Case ID,Date,Scenario,Risk Level,State,Reference,HR Notified,Attachments,${qHeaders}`;
+
+      const csvRows = cases.map(c => {
+        const date = new Date(c.createdAt || c.updatedAt).toLocaleDateString('en-US');
+        const qCols = Array.from({ length: maxQ }, (_, i) => {
+          const q = (c.questions || [])[i];
+          const a = (c.answers || [])[i] || '';
+          if (!q) return ',';
+          const qText = `"${(q.q || '').replace(/"/g, '""')}"`;
+          return `${qText},"${a}"`;
+        }).join(',');
+        const ref = `"${(c.refName || '').replace(/"/g, '""')}"`;
+        const scenarios = (c.scenarios || [c.scenario]).join(' + ');
+        return `"${c.id}","${date}","${scenarios}","${c.risk || ''}","${c.state || ''}",${ref},"${c.hrNotified ? 'Yes' : 'No'}","${(c.attachments || []).length} file(s)",${qCols}`;
+      });
+      const csvContent = [header, ...csvRows].join('\n');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const filename = `pac-cases-${dateStr}.csv`;
+
+      await uploadFileToChannel(hrChannelId, filename, csvContent, `📊 PAC case export — ${cases.length} case${cases.length !== 1 ? 's' : ''} — ${dateStr}`);
+      await postMessage(userId, [{ type: 'section', text: { type: 'mrkdwn', text: `✅  *Export posted to HR channel*\n${cases.length} case${cases.length !== 1 ? 's' : ''} exported as \`${filename}\`. HR can download it directly from the channel.` } }]);
+      return ack('');
+    }
 
     const token  = process.env.PAC_ADMIN_TOKEN;
     const filterParam = filter === 'all' ? '' : `&filter=${filter}`;

@@ -168,8 +168,8 @@ function intakeModal(preSelectedScenario = null) {
       {
         type: ‘input’,
         block_id: B.SCENARIO,
-        label: { type: ‘plain_text’, text: ‘Situation’ },
-        hint: { type: ‘plain_text’, text: ‘Select multiple if this spans more than one situation — questions will come from the first one you pick.’ },
+        label: { type: ‘plain_text’, text: ‘Choose one or multiple scenarios’ },
+        hint: { type: ‘plain_text’, text: ‘Select every scenario that applies. Questions come from the first scenario you pick. Information and documentation guidance will show for all selected scenarios.’ },
         element: scenarioElement,
       },
       { type: ‘divider’ },
@@ -340,35 +340,31 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // ── Scenario meta: description, common examples, documentation guidance
-  const meta = SCENARIO_META[scenario];
-  if (meta) {
-    if (meta.description) {
-      blocks.push({ type: 'divider' });
-      blocks.push({
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*ABOUT THIS SCENARIO*\n${meta.description}` },
-      });
-    }
+  // ── Scenario meta for ALL selected scenarios
+  scenarios.forEach((s, idx) => {
+    const meta = SCENARIO_META[s];
+    if (!meta) return;
+    blocks.push({ type: 'divider' });
+    const label = scenarios.length > 1 ? ` (${idx + 1} of ${scenarios.length})` : '';
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*${meta.emoji || '📋'}  ${s.toUpperCase()}${label}*\n${meta.riskLabel || ''}  ·  ${meta.description || ''}` },
+    });
     if (meta.examples?.length > 0) {
       blocks.push({
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `→  ${e}`).join('\n')}`,
-        },
+        text: { type: 'mrkdwn', text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `→  ${e}`).join('\n')}` },
       });
     }
     if (meta.docGuidance?.length > 0) {
       blocks.push({
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}`,
-        },
+        text: { type: 'mrkdwn', text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}` },
       });
     }
-  }
+    if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+    if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+  });
 
   // ── Questions with selected answers in order
   if (answers.length > 0 && questions.length > 0) {
@@ -516,7 +512,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
 // Posted to PAC_HR_CHANNEL_ID. Employee identity NEVER included.
 // Uses colored border + overflow menu for secondary actions.
 
-function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt, state = 'SUBMITTED', claimedBy = null, answers = [], questions = [], attachments = [], refName = '' }) {
+function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, managerSlackId, submittedAt, state = 'SUBMITTED', claimedBy = null, answers = [], questions = [], attachments = [], refName = '' }) {
   const risk = r(level);
   const meta = SCENARIO_META[scenario] || {};
   const date = new Date(submittedAt).toLocaleString('en-US', {
@@ -581,12 +577,19 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
     blocks.push({ type: 'divider' });
   }
 
-  // ── Watch for / Contact HR guidance
-  if (meta.watch || meta.contactHR) {
-    if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
-    if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Contact HR guidance:* ${meta.contactHR}` }] });
-    blocks.push({ type: 'divider' });
-  }
+  // ── Scenario guidance for ALL selected scenarios
+  scenarios.forEach((s, idx) => {
+    const sm = SCENARIO_META[s];
+    if (!sm) return;
+    const label = scenarios.length > 1 ? ` (${idx + 1} of ${scenarios.length})` : '';
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*${sm.emoji || '📋'}  ${s.toUpperCase()}${label}*  ·  ${sm.riskLabel || ''}` },
+    });
+    if (sm.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${sm.watch}` }] });
+    if (sm.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Contact HR guidance:* ${sm.contactHR}` }] });
+  });
+  blocks.push({ type: 'divider' });
 
   if (claimedBy) {
     blocks.push({
@@ -807,7 +810,7 @@ function homeTabView(cases = []) {
       type: 'context',
       elements: [{ type: 'mrkdwn', text: 'All your checks are saved here — including questions, answers, and any documents you uploaded. Click View to see the full record or export it.' }],
     });
-    cases.slice(0, 10).forEach(c => {
+    cases.forEach(c => {
       const risk = r(c.risk || 'good');
       const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const ref  = c.refName ? `  ·  ${c.refName}` : '  ·  _Private self-check_';
@@ -826,12 +829,6 @@ function homeTabView(cases = []) {
         },
       });
     });
-    if (cases.length > 10) {
-      blocks.push({
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: `+${cases.length - 10} older checks — open the web app to see your full history.` }],
-      });
-    }
   }
 
   blocks.push({ type: 'divider' });
@@ -1181,6 +1178,7 @@ function exportModal({ isHr = false } = {}) {
         action_id: A.EXPORT_DELIVERY,
         placeholder: { type: 'plain_text', text: 'How to receive the file' },
         options: [
+          ...(isHr ? [{ text: { type: 'plain_text', text: 'Post file to HR Slack channel' }, value: 'slack_channel' }] : []),
           { text: { type: 'plain_text', text: 'Send me a download link' }, value: 'link' },
           { text: { type: 'plain_text', text: 'Email to me' }, value: 'email_self' },
           { text: { type: 'plain_text', text: 'Email to a specific address' }, value: 'email_custom' },
