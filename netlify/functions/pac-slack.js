@@ -346,6 +346,38 @@ async function handleBlockActions(payload) {
     return ack();
   }
 
+  // ── Email report to self
+  if (actionId === A.RESULT_EMAIL_SELF) {
+    const caseId = action.value;
+    const rec = await findCaseById(caseId);
+    if (rec) {
+      getSlackUserEmail(userId).then(email =>
+        emailNotify.notifyManagerResult({
+          managerEmail: email, scenario: rec.scenario, level: rec.risk,
+          caseId: rec.id, refName: rec.refName || '', selfCheck: !rec.refName,
+        })
+      ).catch(() => {});
+    }
+    await postEphemeral(channelId || userId, userId, [
+      { type: 'section', text: { type: 'mrkdwn', text: `✉️  Your People Action Check report for case \`${caseId}\` is on its way to your inbox.` } },
+    ]);
+    return ack();
+  }
+
+  // ── Set 30-day follow-up reminder
+  if (actionId === A.RESULT_SET_FOLLOWUP) {
+    const caseId = action.value;
+    const rec = await findCaseById(caseId);
+    if (rec) {
+      const followupDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      await saveCase({ ...rec, followupDate, updatedAt: new Date().toISOString() });
+      await postEphemeral(channelId || userId, userId, [
+        { type: 'section', text: { type: 'mrkdwn', text: `📅  30-day reminder saved for *${followupDate}*. It will appear on your People Action Check home screen.` } },
+      ]);
+    }
+    return ack();
+  }
+
   // ── Overflow menu from HR triage — value format: "pac_hr_<action>::<caseId>"
   if (actionId === A.HR_OVERFLOW) {
     const [overflowAction, caseId] = (action.selected_option?.value || '').split('::');
@@ -482,7 +514,7 @@ async function handleNotifyHr(caseId, userId, channelId) {
   if (rec.dmTs && rec.dmChannelId) {
     await updateMessage(
       rec.dmChannelId, rec.dmTs,
-      resultDmMessage({ scenario: rec.scenario, level: rec.risk, caseId: rec.id, hrNotified: true })
+      resultDmMessage({ scenario: rec.scenario, level: rec.risk, caseId: rec.id, hrNotified: true, refName: rec.refName || '', answers: rec.answers || [], questions: SCENARIO_QUESTIONS[rec.scenario] || [] })
     );
   }
 
@@ -620,7 +652,7 @@ async function handleViewSubmission(payload) {
     };
     await saveCase(caseRecord);
 
-    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: false, refName: refName || '' });
+    const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: false, refName: refName || '', answers, questions });
     const dm    = await postMessage(userId, dmMsg);
 
     if (dm.ok) {

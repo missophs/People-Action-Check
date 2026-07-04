@@ -27,6 +27,8 @@ const ACTION_IDS = {
   RESULT_NOTIFY_HR:         'pac_result_notify_hr',
   RESULT_OPEN_WEB:          'pac_result_open_web',
   RESULT_UPLOAD_DOC:        'pac_result_upload_doc',
+  RESULT_EMAIL_SELF:        'pac_result_email_self',
+  RESULT_SET_FOLLOWUP:      'pac_result_set_followup',
 
   // Upload documentation modal
   DOC_FILES:                'pac_doc_files',

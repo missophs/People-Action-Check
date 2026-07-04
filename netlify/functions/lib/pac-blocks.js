@@ -206,7 +206,16 @@ function questionsModal(scenario, questions, privateMetadata) {
 // Uses colored left border to signal risk level visually.
 // Includes next steps so the DM is immediately actionable.
 
-function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNotified = false, followupCount = 0, refName = '' }) {
+const SCENARIO_CAUTION = {
+  'Performance Decline':        'If you are unsure whether the performance issue is connected to a medical condition, disability, leave, or a recent complaint — stop and contact HR before doing anything else.',
+  'Attendance Issue':           'If any absences may be covered by FMLA, ADA, state leave, or another protected reason — confirm with HR before issuing any discipline.',
+  'Termination Consideration':  'If the employee has raised a complaint, requested accommodation, or is on or recently returned from leave — stop and get HR clearance first.',
+  'Retaliation Concern':        'Any adverse action that follows protected activity carries significant legal risk. Confirm your rationale with HR and employment counsel before proceeding.',
+  'Harassment / Discrimination':'If any party has filed or may file a complaint — stop and escalate to HR today. Do not attempt to resolve this informally.',
+  'Leave of Absence':           'Do not take any action related to attendance or performance while protected leave status is unconfirmed.',
+};
+
+function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNotified = false, followupCount = 0, refName = '', answers = [], questions = [] }) {
   const selfCheck = !refName;
   const risk = r(level);
   const steps = NEXT_STEPS[scenario] || {};
@@ -223,10 +232,9 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     ? `:red_circle:  *High Risk — stop. HR clearance required before any action.*\nDo not schedule meetings, issue warnings, or communicate with the employee until HR has reviewed this case.`
     : level === 'warn'
     ? `:yellow_circle:  *Elevated Risk — consult HR before you proceed.*\nAddress the documentation gaps below and confirm your next move with HR first.`
-    : `:large_green_circle:  *Low Risk — routine situation.*\nProceed using standard process. Keep a record of this conversation and any actions you take.`;
+    : `:large_green_circle:  *Low Risk — routine management action.*\nProceed using standard process. Document each step you take.`;
 
   const blocks = [
-    // ── Case header — scenario + case ID + status in one compact line
     {
       type: 'section',
       text: {
@@ -235,32 +243,54 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
       },
     },
     { type: 'divider' },
-    // ── Risk guidance — lead with what matters most
     {
       type: 'section',
       text: { type: 'mrkdwn', text: guidanceText },
     },
   ];
 
-  // ── Next steps (3 bullets, scenario-specific)
+  // ── Next steps (scenario-specific)
   if (stepList.length > 0) {
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*Recommended next steps:*\n${stepList.map(s => `•  ${s}`).join('\n')}`,
+        text: `*Recommended next steps:*\n${stepList.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}`,
+      },
+    });
+  }
+
+  // ── "Still not sure?" caution (scenario-specific, shown at good/warn levels)
+  const caution = SCENARIO_CAUTION[scenario];
+  if (caution && level !== 'risk') {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `⚠️  *Still not sure?* ${caution}` }],
+    });
+  }
+
+  // ── Answer breakdown
+  if (answers.length > 0) {
+    const yes = answers.filter(a => a === 'yes').length;
+    const no  = answers.filter(a => a === 'no').length;
+    const unk = answers.filter(a => a === 'unknown').length;
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Answer breakdown:*  ✅ Yes: *${yes}*   ❌ No: *${no}*   ❓ Don't know: *${unk}*`,
       },
     });
   }
 
   blocks.push({ type: 'divider' });
 
-  // ── Actions
+  // ── Primary actions (Notify HR / Upload / Open Web)
   if (selfCheck) {
-    // No employee name → self-check only, HR never notified
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '🔒  This check is saved to your history only. HR has not been notified and cannot be notified without an employee reference.' }],
+      elements: [{ type: 'mrkdwn', text: '🔒  Saved to your history only. HR has not been notified.' }],
     });
     blocks.push({
       type: 'actions',
@@ -301,7 +331,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Notify HR', emoji: true },
+          text: { type: 'plain_text', text: 'Send to HR', emoji: true },
           style: level === 'risk' ? 'danger' : 'primary',
           action_id: A.RESULT_NOTIFY_HR,
           value: caseId,
@@ -322,7 +352,31 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     });
   }
 
-  // Web handoff prompt for high risk or ≥3 follow-ups
+  // ── Secondary actions (run again, email report, 30-day follow-up)
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Run Again', emoji: true },
+        action_id: A.SLASH_OPEN_INTAKE,
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Email Report', emoji: true },
+        action_id: A.RESULT_EMAIL_SELF,
+        value: caseId,
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '📅 Set 30-Day Reminder', emoji: true },
+        action_id: A.RESULT_SET_FOLLOWUP,
+        value: caseId,
+      },
+    ],
+  });
+
+  // Web handoff for high risk / many follow-ups
   if ((level === 'risk' || followupCount >= 3) && hrNotified) {
     blocks.push({
       type: 'section',
@@ -493,6 +547,30 @@ function homeTabView(cases = []) {
     { type: 'divider' },
   ];
 
+  // ── Follow-up reminders (cases with a followupDate set)
+  const today = new Date().toISOString().slice(0, 10);
+  const followups = cases.filter(c => c.followupDate && c.followupDate <= today && c.state !== 'CLOSED' && c.state !== 'ARCHIVED');
+  if (followups.length > 0) {
+    blocks.push({ type: 'header', text: { type: 'plain_text', text: '📅 Follow-up Reminders' } });
+    followups.forEach(c => {
+      const risk = r(c.risk || 'good');
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${risk.emoji}  *${c.scenario}*${c.refName ? `  ·  ${c.refName}` : ''}\nReview progress  ·  \`${c.id}\``,
+        },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+          action_id: A.RESULT_OPEN_WEB,
+          value: c.id,
+        },
+      });
+    });
+    blocks.push({ type: 'divider' });
+  }
+
   // ── Case history
   if (cases.length > 0) {
     blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Recent Checks' } });
@@ -500,11 +578,12 @@ function homeTabView(cases = []) {
       const risk = r(c.risk || 'good');
       const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const ref  = c.refName ? `  ·  ${c.refName}` : '  ·  _Self-check_';
+      const followupNote = c.followupDate && c.followupDate > today ? `  ·  📅 ${c.followupDate}` : '';
       blocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\``,
+          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`${followupNote}`,
         },
       });
     });
