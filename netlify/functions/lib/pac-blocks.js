@@ -409,15 +409,21 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
   } else if (hrNotified) {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '✅  Sent to HR — they will follow up in Slack.' }],
+      elements: [{ type: 'mrkdwn', text: '✅  Sent to HR — they will follow up in Slack. You can message HR below at any time.' }],
     });
     blocks.push({
       type: 'actions',
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Attach Files', emoji: true },
+          text: { type: 'plain_text', text: '💬  Message HR', emoji: true },
           style: 'primary',
+          action_id: A.MGR_REPLY,
+          value: JSON.stringify({ caseId, scenario }),
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Attach Files', emoji: true },
           action_id: A.RESULT_UPLOAD_DOC,
           value: caseId,
         },
@@ -948,25 +954,26 @@ function managerReplyModal(caseId, scenario) {
   return {
     type: 'modal',
     callback_id: C.MODAL_MGR_REPLY,
-    title: { type: 'plain_text', text: 'Reply to HR' },
-    submit: { type: 'plain_text', text: 'Send Reply' },
+    title: { type: 'plain_text', text: 'Message HR' },
+    submit: { type: 'plain_text', text: 'Send' },
     close:  { type: 'plain_text', text: 'Cancel' },
     private_metadata: JSON.stringify({ caseId, scenario }),
     blocks: [
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: `*${scenario}*  ·  Case \`${caseId}\`\nYour reply will be sent to the HR team.` },
+        text: { type: 'mrkdwn', text: `*${scenario}*  ·  Case \`${caseId}\`\nYour message goes directly to the HR team — not visible to anyone else.` },
       },
       { type: 'divider' },
       {
         type: 'input',
         block_id: B.MGR_REPLY,
-        label: { type: 'plain_text', text: 'Your reply' },
+        label: { type: 'plain_text', text: 'Your message' },
+        hint: { type: 'plain_text', text: 'HR will receive this in Slack and by email. You can share updates, ask questions, or provide additional context.' },
         element: {
           type: 'plain_text_input',
           action_id: A.MGR_REPLY_INPUT,
           multiline: true,
-          placeholder: { type: 'plain_text', text: 'Type your reply to HR…' },
+          placeholder: { type: 'plain_text', text: 'Type your message to HR…' },
           max_length: 2000,
         },
       },
