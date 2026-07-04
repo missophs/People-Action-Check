@@ -61,27 +61,23 @@ function computeScore(questions, answers) {
 function slashResponseBlocks() {
   return [
     {
-      type: 'header',
-      text: { type: 'plain_text', text: 'People Action Check', emoji: true },
-    },
-    {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: 'Structured HR risk guidance before you act on an employee situation. Private to you — results are never shared to the channel.',
+        text: ':shield:  *People Action Check*\nGet HR guidance before you act. Private, confidential, under 2 minutes.',
       },
       accessory: {
         type: 'button',
-        text: { type: 'plain_text', text: 'Start New Check', emoji: true },
+        text: { type: 'plain_text', text: 'Run a Check', emoji: true },
         style: 'primary',
         action_id: A.SLASH_OPEN_INTAKE,
       },
     },
-    { type: 'divider' },
     {
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '*Quick access*' }],
+      elements: [{ type: 'mrkdwn', text: ':lock:  Private to you — nothing is posted to this channel' }],
     },
+    { type: 'divider' },
     {
       type: 'actions',
       elements: [
@@ -92,7 +88,7 @@ function slashResponseBlocks() {
         },
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'HR Cases', emoji: true },
+          text: { type: 'plain_text', text: 'HR Queue', emoji: true },
           action_id: A.SLASH_HR_CASES,
         },
         {
@@ -111,31 +107,24 @@ function intakeModal() {
   return {
     type: ‘modal’,
     callback_id: C.MODAL_INTAKE,
-    title: { type: ‘plain_text’, text: ‘People Action Check’ },
-    submit: { type: ‘plain_text’, text: ‘Continue’ },
+    title: { type: ‘plain_text’, text: ‘New Check’ },
+    submit: { type: ‘plain_text’, text: ‘Start’ },
     close:  { type: ‘plain_text’, text: ‘Cancel’ },
     blocks: [
       {
-        type: ‘section’,
-        text: {
-          type: ‘mrkdwn’,
-          text: ‘*What situation are you navigating?*\nAnswer 5 risk questions and get your risk level with recommended next steps in under 2 minutes.’,
-        },
-      },
-      {
         type: ‘context’,
-        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private to you. Results are never posted to any channel.’ }],
+        elements: [{ type: ‘mrkdwn’, text: ‘:lock:  Private to you — results are never posted to any channel’ }],
       },
       { type: ‘divider’ },
       {
         type: ‘input’,
         block_id: B.SCENARIO,
-        label: { type: ‘plain_text’, text: ‘Scenario’, emoji: true },
-        hint: { type: ‘plain_text’, text: ‘Select all that apply. Questions will be drawn from the primary (first) scenario selected.’ },
+        label: { type: ‘plain_text’, text: ‘What are you dealing with?’ },
+        hint: { type: ‘plain_text’, text: ‘Pick the closest match. Select multiple if this spans more than one situation — questions will come from your first choice.’ },
         element: {
           type: ‘multi_static_select’,
           action_id: A.INTAKE_SCENARIO,
-          placeholder: { type: ‘plain_text’, text: ‘Choose one or more scenarios...’ },
+          placeholder: { type: ‘plain_text’, text: ‘Choose a situation...’ },
           options: SCENARIO_NAMES.map(s => ({
             text: { type: ‘plain_text’, text: s },
             value: s,
@@ -147,12 +136,12 @@ function intakeModal() {
         type: ‘input’,
         block_id: B.REF_NAME,
         optional: true,
-        label: { type: ‘plain_text’, text: ‘Employee reference (optional)’, emoji: true },
-        hint: { type: ‘plain_text’, text: ‘A private code only you will see (e.g. initials). Required if you may escalate to HR. Never shared.’ },
+        label: { type: ‘plain_text’, text: ‘Employee reference (optional)’ },
+        hint: { type: ‘plain_text’, text: ‘A short private code you will recognize (e.g. initials). Only visible to you. Required if you want to escalate to HR later.’ },
         element: {
           type: ‘plain_text_input’,
           action_id: A.INTAKE_REF_NAME,
-          placeholder: { type: ‘plain_text’, text: ‘e.g. J.D. or any short code you will recognize’ },
+          placeholder: { type: ‘plain_text’, text: ‘e.g. J.D.’ },
           max_length: 80,
         },
       },
@@ -169,12 +158,12 @@ function questionsModal(scenario, questions, privateMetadata) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${scenario}*\nAnswer each question based on what you know right now. Answer honestly — the risk level is only useful if it reflects reality.`,
+        text: `*${scenario}*\nAnswer based on what you know right now. Honest answers give you a useful result.`,
       },
     },
     ...(criticalCount > 0 ? [{
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: `⚠️  ${criticalCount} critical question${criticalCount > 1 ? 's' : ''} — a No or Don't Know answer escalates directly to High Risk.` }],
+      elements: [{ type: 'mrkdwn', text: `⚠️  ${criticalCount} critical question${criticalCount > 1 ? 's' : ''} in this set — answering No or Don't know on any of them raises the result to High Risk.` }],
     }] : []),
     { type: 'divider' },
   ];
@@ -183,8 +172,12 @@ function questionsModal(scenario, questions, privateMetadata) {
     blocks.push({
       type: 'input',
       block_id: `${B.Q_PREFIX}${i}`,
-      label: { type: 'plain_text', text: `${i + 1}. ${q.q}${q.critical ? '  ⚠️' : ''}` },
-      ...(q.hint ? { hint: { type: 'plain_text', text: q.hint } } : {}),
+      label: { type: 'plain_text', text: `${i + 1}. ${q.q}` },
+      ...(q.hint || q.critical ? {
+        hint: { type: 'plain_text', text: q.critical
+          ? `${q.hint ? q.hint + '  ' : ''}Critical — No or Don't know raises this to High Risk.`
+          : q.hint },
+      } : {}),
       element: {
         type: 'radio_buttons',
         action_id: `${A.Q_ANSWER_PREFIX}${i}`,
@@ -222,42 +215,30 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     ? `${scenario}\n_+ ${scenarios.slice(1).join(', ')}_`
     : scenario;
 
-  const statusField = selfCheck
-    ? '🔒  Self-check — HR not notified'
-    : hrNotified ? '📬  HR Notified' : '⏳  Pending notification';
+  const statusFlag = selfCheck
+    ? ':lock:  Private check'
+    : hrNotified ? ':white_check_mark:  HR notified' : ':hourglass_flowing_sand:  Awaiting HR';
+
+  const guidanceText = level === 'risk'
+    ? `:red_circle:  *High Risk — stop. HR clearance required before any action.*\nDo not schedule meetings, issue warnings, or communicate with the employee until HR has reviewed this case.`
+    : level === 'warn'
+    ? `:yellow_circle:  *Elevated Risk — consult HR before you proceed.*\nAddress the documentation gaps below and confirm your next move with HR first.`
+    : `:large_green_circle:  *Low Risk — routine situation.*\nProceed using standard process. Keep a record of this conversation and any actions you take.`;
 
   const blocks = [
-    // ── Identity header
+    // ── Case header — scenario + case ID + status in one compact line
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: selfCheck ? `*People Action Check  ·  Risk Self-Check*` : `*People Action Check  ·  Result*`,
+        text: `*${scenarioDisplay}*\n\`${caseId}\`  ·  ${statusFlag}`,
       },
     },
     { type: 'divider' },
-    // ── Score card
+    // ── Risk guidance — lead with what matters most
     {
       type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*Scenario*\n${scenarioDisplay}` },
-        { type: 'mrkdwn', text: `*Risk Level*\n${risk.emoji}  ${risk.label}` },
-        { type: 'mrkdwn', text: `*Case ID*\n\`${caseId}\`` },
-        { type: 'mrkdwn', text: `*Status*\n${statusField}` },
-      ],
-    },
-    { type: 'divider' },
-    // ── Risk guidance
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: level === 'risk'
-          ? `${risk.emoji}  *High Risk — stop and get HR clearance before taking any action.*\nDo not schedule meetings, issue warnings, or communicate anything to the employee until HR has reviewed this situation.`
-          : level === 'warn'
-          ? `${risk.emoji}  *Elevated Risk — HR consultation recommended before proceeding.*\nReview your documentation, address the gaps below, and confirm next steps with HR.`
-          : `${risk.emoji}  *Low Risk — routine situation.*\nProceed with careful documentation following standard process.`,
-      },
+      text: { type: 'mrkdwn', text: guidanceText },
     },
   ];
 
@@ -378,31 +359,23 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
   });
 
   const blocks = [
-    // ── Header
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: `${risk.emoji}  PAC Submission — ${risk.label}` },
-    },
-    { type: 'divider' },
-    // ── Metadata grid
+    // ── Case header — scenario + key facts in one scannable line
     {
       type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*Scenario*\n${scenario}` },
-        { type: 'mrkdwn', text: `*Risk Level*\n${risk.emoji}  ${risk.label}` },
-        { type: 'mrkdwn', text: `*Submitted by*\n<@${managerSlackId}>` },
-        { type: 'mrkdwn', text: `*Submitted*\n${date} ET` },
-        { type: 'mrkdwn', text: `*Case ID*\n\`${caseId}\`` },
-        { type: 'mrkdwn', text: `*Status*\n${stateLabel(state)}` },
-      ],
+      text: {
+        type: 'mrkdwn',
+        text: `${risk.emoji}  *${scenario}*  ·  ${risk.label}\n<@${managerSlackId}>  ·  ${date} ET  ·  \`${caseId}\`  ·  ${stateLabel(state)}`,
+      },
     },
+    { type: 'divider' },
   ];
 
   if (level === 'risk') {
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: '🔴  *High Risk — HR review required before any manager action is taken.*' },
+      text: { type: 'mrkdwn', text: ':red_circle:  *High Risk — manager is awaiting HR clearance. Review and respond before any action is taken.*' },
     });
+    blocks.push({ type: 'divider' });
   }
 
   if (claimedBy) {
@@ -502,11 +475,11 @@ function homeTabView(cases = []) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: '*People Action Check*\nStructured HR risk guidance before you act on an employee situation.\n_Answer 5 questions · Get your risk level · Know your next steps_',
+        text: ':shield:  *People Action Check*\nConfidential HR guidance before you act. Under 2 minutes.',
       },
       accessory: {
         type: 'button',
-        text: { type: 'plain_text', text: 'Start New Check', emoji: true },
+        text: { type: 'plain_text', text: 'Run a Check', emoji: true },
         style: 'primary',
         action_id: A.SLASH_OPEN_INTAKE,
       },
@@ -643,15 +616,11 @@ function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level 
   const risk = r(level || 'good');
   const blocks = [
     {
-      type: 'header',
-      text: { type: 'plain_text', text: 'HR Follow-up — People Action Check' },
-    },
-    {
       type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*Scenario*\n${scenario}` },
-        { type: 'mrkdwn', text: `*Case*\n\`${caseId}\`` },
-      ],
+      text: {
+        type: 'mrkdwn',
+        text: `*${scenario}*  ·  \`${caseId}\`\nHR has a question about this case.`,
+      },
     },
     { type: 'divider' },
     {
@@ -768,25 +737,19 @@ function caseReassignedDmMessage({ caseId, scenario, level, state, previousManag
   const blocks = [
     {
       type: 'section',
-      text: { type: 'mrkdwn', text: `*People Action Check  ·  Case Reassigned to You*` },
+      text: {
+        type: 'mrkdwn',
+        text: `${risk.emoji}  *${scenario}*  ·  ${risk.label}\n\`${caseId}\`  ·  Previously held by <@${previousManagerId}>`,
+      },
     },
     { type: 'divider' },
-    {
-      type: 'section',
-      fields: [
-        { type: 'mrkdwn', text: `*Scenario*\n${scenario}` },
-        { type: 'mrkdwn', text: `*Risk Level*\n${risk.emoji}  ${risk.label}` },
-        { type: 'mrkdwn', text: `*Case ID*\n\`${caseId}\`` },
-        { type: 'mrkdwn', text: `*Previous Manager*\n<@${previousManagerId}>` },
-      ],
-    },
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
         text: hrNote
           ? `*Note from HR:* ${hrNote}`
-          : `HR has reassigned this active case to you. Review the current state and follow up with HR if needed.`,
+          : `HR has reassigned this case to you. Review the current state and follow up with HR if you need guidance.`,
       },
     },
     { type: 'divider' },
