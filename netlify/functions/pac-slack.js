@@ -497,11 +497,15 @@ async function notifyHrCore(caseId, userId) {
   if (!hrChannelId) return;
 
   const now = new Date().toISOString();
+  const questions   = SCENARIO_QUESTIONS[rec.scenario] || [];
+  const attachments = rec.attachments || [];
+
   const msg = await postMessage(
     hrChannelId,
     hrTriageMessage({
       scenario: rec.scenario, level: rec.risk, caseId: rec.id,
       managerSlackId: userId, submittedAt: now, state: CASE_STATES.SUBMITTED,
+      answers: rec.answers || [], questions, attachments, refName: rec.refName || '',
     })
   );
 
@@ -516,32 +520,22 @@ async function notifyHrCore(caseId, userId) {
   };
   await saveCase(updated);
 
-  // Prior attachments → post permalink links to HR thread
-  const priorAttachments = rec.attachments || [];
-  if (priorAttachments.length > 0) {
-    const fileLinks = priorAttachments.map(f => `• <${f.url}|${f.name}>`).join('\n');
-    await postMessage(
-      hrChannelId,
-      [{ type: 'section', text: { type: 'mrkdwn', text: `📎  Manager attached ${priorAttachments.length} file${priorAttachments.length > 1 ? 's' : ''} to this case:\n${fileLinks}` } }],
-      'Prior documentation',
-      { thread_ts: msg.ts }
-    );
-  }
-
   // Update manager DM to show HR notified state
   if (rec.dmTs && rec.dmChannelId) {
     await updateMessage(
       rec.dmChannelId, rec.dmTs,
-      resultDmMessage({ scenario: rec.scenario, level: rec.risk, caseId: rec.id, hrNotified: true, refName: rec.refName || '', answers: rec.answers || [], questions: SCENARIO_QUESTIONS[rec.scenario] || [] })
+      resultDmMessage({ scenario: rec.scenario, level: rec.risk, caseId: rec.id, hrNotified: true, refName: rec.refName || '', answers: rec.answers || [], questions })
     );
   }
 
-  // Email HR (fire-and-forget)
+  // Email HR with full Q&A, next steps, and file links (fire-and-forget)
   getHrEmail().then(hrEmail =>
     emailNotify.notifyHrOfCase({
       hrEmail, scenario: rec.scenario, level: rec.risk,
       caseId: rec.id, managerSlackId: userId,
-      fileRefs: rec.attachments || [],
+      answers: rec.answers || [], questions,
+      fileRefs: attachments,
+      refName: rec.refName || '',
     })
   ).catch(() => {});
 }
@@ -576,12 +570,15 @@ async function handleHrTransition(caseId, hrUserId, newState, auditEvent) {
 
   // Update HR triage message in place
   if (rec.hrChannelId && rec.hrChannelTs) {
+    const qs = SCENARIO_QUESTIONS[updated.scenario] || [];
     await updateMessage(
       rec.hrChannelId, rec.hrChannelTs,
       hrTriageMessage({
         scenario: updated.scenario, level: updated.risk, caseId: updated.id,
         managerSlackId: updated.managerId, submittedAt: updated.createdAt,
         state: newState, claimedBy: updated.claimedBy || null,
+        answers: updated.answers || [], questions: qs,
+        attachments: updated.attachments || [], refName: updated.refName || '',
       })
     );
   }
@@ -622,12 +619,15 @@ async function handleHrClaim(caseId, hrUserId) {
   await saveCase(updated);
 
   if (rec.hrChannelId && rec.hrChannelTs) {
+    const qs = SCENARIO_QUESTIONS[updated.scenario] || [];
     await updateMessage(
       rec.hrChannelId, rec.hrChannelTs,
       hrTriageMessage({
         scenario: updated.scenario, level: updated.risk, caseId: updated.id,
         managerSlackId: updated.managerId, submittedAt: updated.createdAt,
         state: CASE_STATES.ACKNOWLEDGED, claimedBy: hrUserId,
+        answers: updated.answers || [], questions: qs,
+        attachments: updated.attachments || [], refName: updated.refName || '',
       })
     );
   }
@@ -791,6 +791,8 @@ async function handleViewSubmission(payload) {
           scenario: updated.scenario, level: updated.risk, caseId: updated.id,
           managerSlackId: updated.managerId, submittedAt: updated.createdAt,
           state: CASE_STATES.CLOSED, claimedBy: updated.claimedBy || null,
+          answers: updated.answers || [], questions: SCENARIO_QUESTIONS[updated.scenario] || [],
+          attachments: updated.attachments || [], refName: updated.refName || '',
         })
       );
       await postMessage(

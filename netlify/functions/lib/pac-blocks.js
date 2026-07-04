@@ -510,8 +510,9 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
 // Posted to PAC_HR_CHANNEL_ID. Employee identity NEVER included.
 // Uses colored border + overflow menu for secondary actions.
 
-function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt, state = 'SUBMITTED', claimedBy = null }) {
+function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt, state = 'SUBMITTED', claimedBy = null, answers = [], questions = [], attachments = [], refName = '' }) {
   const risk = r(level);
+  const meta = SCENARIO_META[scenario] || {};
   const date = new Date(submittedAt).toLocaleString('en-US', {
     timeZone: 'America/New_York',
     month: 'short', day: 'numeric',
@@ -519,12 +520,12 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
   });
 
   const blocks = [
-    // ── Case header — scenario + key facts in one scannable line
+    // ── Case header
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${risk.emoji}  *${scenario}*  ·  ${risk.label}\n<@${managerSlackId}>  ·  ${date} ET  ·  \`${caseId}\`  ·  ${stateLabel(state)}`,
+        text: `${risk.emoji}  *${scenario}*  ·  *${risk.label}*\n<@${managerSlackId}>  ·  ${date} ET  ·  \`${caseId}\`  ·  ${stateLabel(state)}${refName ? `  ·  Ref: ${refName}` : ''}`,
       },
     },
     { type: 'divider' },
@@ -538,6 +539,49 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
     blocks.push({ type: 'divider' });
   }
 
+  // ── Full Q&A
+  if (questions.length > 0) {
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*MANAGER\'S ANSWERS*' } });
+    const ansLabel = { yes: '✅  Yes', no: '❌  No', unknown: '❓  Not sure' };
+    questions.forEach((q, i) => {
+      const ans = answers[i];
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*${i + 1}.${q.critical ? '  ⚠️' : ''}  ${q.q}*\n${ansLabel[ans] || '_No answer_'}`,
+        },
+      });
+    });
+    const yesCount = answers.filter(a => a === 'yes').length;
+    const noCount  = answers.filter(a => a === 'no').length;
+    const unkCount = answers.filter(a => a === 'unknown').length;
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `✅  ${yesCount} Yes   ❌  ${noCount} No   ❓  ${unkCount} Not sure` }],
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // ── Uploaded documents
+  if (attachments.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.permalink}|${a.name}>`).join('\n')}`,
+      },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  // ── Watch for / Contact HR guidance
+  if (meta.watch || meta.contactHR) {
+    if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+    if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Contact HR guidance:* ${meta.contactHR}` }] });
+    blocks.push({ type: 'divider' });
+  }
+
   if (claimedBy) {
     blocks.push({
       type: 'context',
@@ -545,9 +589,7 @@ function hrTriageMessage({ scenario, level, caseId, managerSlackId, submittedAt,
     });
   }
 
-  blocks.push({ type: 'divider' });
-
-  // ── Actions — primary button + overflow for secondary actions + web link
+  // ── Actions
   const actionElements = buildHrActions(state, caseId);
   if (actionElements.length > 0) {
     blocks.push({ type: 'actions', block_id: B.HR_ACTIONS, elements: actionElements });
@@ -603,27 +645,38 @@ function buildHrActions(state, caseId) {
     ],
   };
 
+  const msgManagerBtn = {
+    type: 'button',
+    text: { type: 'plain_text', text: '💬  Message Manager', emoji: true },
+    action_id: A.HR_ASK_FOLLOWUP,
+    value: caseId,
+  };
+
   if (state === 'SUBMITTED') {
     return [
       { type: 'button', text: { type: 'plain_text', text: 'Acknowledge' }, style: 'primary', action_id: A.HR_ACKNOWLEDGE, value: caseId },
+      msgManagerBtn,
       { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.SUBMITTED },
     ];
   }
   if (state === 'ACKNOWLEDGED') {
     return [
       { type: 'button', text: { type: 'plain_text', text: 'Mark In Review' }, style: 'primary', action_id: A.HR_MARK_REVIEW, value: caseId },
+      msgManagerBtn,
       { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.ACKNOWLEDGED },
     ];
   }
   if (state === 'UNDER_REVIEW') {
     return [
       { type: 'button', text: { type: 'plain_text', text: 'Resolve', emoji: true }, style: 'primary', action_id: A.HR_RESOLVE, value: caseId },
+      msgManagerBtn,
       { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.UNDER_REVIEW },
     ];
   }
   if (state === 'ESCALATED') {
     return [
       { type: 'button', text: { type: 'plain_text', text: 'Close Case', emoji: true }, style: 'primary', action_id: A.HR_CLOSE, value: caseId },
+      msgManagerBtn,
       { type: 'overflow', action_id: A.HR_OVERFLOW, options: overflowOptionsByState.ESCALATED },
     ];
   }
