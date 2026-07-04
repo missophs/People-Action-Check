@@ -194,20 +194,55 @@ function intakeModal(preSelectedScenario = null) {
 
 function questionsModal(scenario, questions, privateMetadata) {
   const criticalCount = questions.filter(q => q.critical).length;
+  const meta = SCENARIO_META[scenario] || {};
+
   const blocks = [
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${scenario}*\nAnswer based on what you know right now. Honest answers give you a useful result.`,
+        text: `${meta.emoji || '📋'}  *${scenario}*  ·  _${meta.riskLabel || 'Moderate Risk'}_\n${meta.description || ''}`,
       },
     },
-    ...(criticalCount > 0 ? [{
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: `⚠️  ${criticalCount} critical question${criticalCount > 1 ? 's' : ''} in this set — answering No or Don't know on any of them raises the result to High Risk.` }],
-    }] : []),
     { type: 'divider' },
   ];
+
+  // -- Examples
+  if (meta.examples?.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*COMMON EXAMPLES*\n${meta.examples.map(e => `->  ${e}`).join('\n')}` },
+    });
+  }
+
+  // -- Documentation guidance
+  if (meta.docGuidance?.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*DOCUMENTATION GUIDANCE*\n${meta.docGuidance.map((g, i) => `*${i + 1}.*  ${g}`).join('\n')}` },
+    });
+  }
+
+  // -- Watch for / Contact HR
+  if (meta.watch)     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
+  if (meta.contactHR) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
+
+  blocks.push({ type: 'divider' });
+
+  // -- Questions header
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: `*QUESTIONS*\nAnswer based on what you know right now. Honest answers give you a useful result.` },
+  });
+
+  if (criticalCount > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `⚠️  ${criticalCount} critical question${criticalCount > 1 ? 's' : ''} in this set — answering No or Not sure on any of them raises the result to High Risk.` }],
+    });
+  }
+
+  blocks.push({ type: 'divider' });
 
   questions.forEach((q, i) => {
     blocks.push({
@@ -232,18 +267,6 @@ function questionsModal(scenario, questions, privateMetadata) {
       },
     });
   });
-
-  // -- Watch for / Contact HR at bottom of questions
-  const meta = SCENARIO_META[scenario];
-  if (meta?.watch || meta?.contactHR) {
-    blocks.push({ type: 'divider' });
-    if (meta.watch) {
-      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `⚠️  *Watch for:* ${meta.watch}` }] });
-    }
-    if (meta.contactHR) {
-      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📞  *Not sure? Contact HR:* ${meta.contactHR}` }] });
-    }
-  }
 
   return {
     type: 'modal',
