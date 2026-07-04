@@ -201,18 +201,9 @@ function questionsModal(scenario, questions, privateMetadata) {
   const criticalCount = questions.filter(q => q.critical).length;
   const meta = SCENARIO_META[scenario] || {};
 
-  const blocks = [
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `${meta.emoji || '📋'}  *${scenario}*  ·  _${meta.riskLabel || 'Moderate Risk'}_\n${meta.description || ''}`,
-      },
-    },
-    { type: 'divider' },
-  ];
+  const blocks = [];
 
-  // -- Examples
+  // -- Examples first
   if (meta.examples?.length > 0) {
     blocks.push({
       type: 'section',
@@ -276,7 +267,7 @@ function questionsModal(scenario, questions, privateMetadata) {
   return {
     type: 'modal',
     callback_id: C.MODAL_QUESTIONS,
-    title: { type: 'plain_text', text: 'Risk Assessment' },
+    title: { type: 'plain_text', text: scenario.length <= 24 ? scenario : scenario.slice(0, 23) + '…' },
     submit: { type: 'plain_text', text: 'See Result' },
     close:  { type: 'plain_text', text: 'Back' },
     private_metadata: privateMetadata,
@@ -745,16 +736,7 @@ function homeTabView(cases = []) {
           type: 'button',
           text: { type: 'plain_text', text: 'Company Policies', emoji: true },
           action_id: A.SLASH_OPEN_POLICIES,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'My Cases', emoji: true },
-          action_id: A.SLASH_LIST_CASES,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Export', emoji: true },
-          action_id: A.SLASH_EXPORT_CASES,
+          style: 'primary',
         },
       ],
     },
@@ -871,6 +853,21 @@ function homeTabView(cases = []) {
   }
 
   blocks.push({ type: 'divider' });
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'My Cases', emoji: true },
+        action_id: A.SLASH_LIST_CASES,
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Export', emoji: true },
+        action_id: A.SLASH_EXPORT_CASES,
+      },
+    ],
+  });
   blocks.push({
     type: 'context',
     elements: [{ type: 'mrkdwn', text: 'People Action Check  ·  General guidance only — not legal advice.' }],
