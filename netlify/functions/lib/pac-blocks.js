@@ -182,7 +182,7 @@ function intakeModal(preSelectedScenario = null) {
         element: {
           type: 'plain_text_input',
           action_id: A.INTAKE_REF_NAME,
-          placeholder: { type: 'plain_text', text: 'e.g. J.D.' },
+          placeholder: { type: 'plain_text', text: 'e.g. J. Mitchell' },
           max_length: 80,
         },
       },
