@@ -688,8 +688,29 @@ function buildHrActions(state, caseId) {
 // Enterprise dashboard surface. Published via views.publish.
 // Shows active cases, quick start, and how-it-works.
 
-function homeTabView(cases = []) {
-  const blocks = [
+function homeTabView(cases = [], activeResult = null) {
+  const blocks = [];
+
+  // -- Result banner (shown immediately after completing a check)
+  if (activeResult) {
+    const { scenario, level, caseId, refName, steps = [] } = activeResult;
+    const risk = r(level);
+    const header = level === 'risk'
+      ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
+      : level === 'warn'
+      ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
+      : '🟢  LOW RISK — Routine management action. Document each step.';
+    blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Your Result', emoji: true } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${header}*` } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}\n*Case ID:* \`${caseId}\`${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } });
+    if (steps.length > 0) {
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Recommended Next Steps*\n${steps.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}` } });
+    }
+    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '📩  Full result sent to you via DM — including your answers, documentation guidance, and next steps.' }] });
+    blocks.push({ type: 'divider' });
+  }
+
+  blocks.push(
     // -- Masthead
     {
       type: 'header',
@@ -727,7 +748,7 @@ function homeTabView(cases = []) {
       },
     },
     { type: 'divider' },
-  ];
+  );
 
   // -- Scenario cards — each is its own entry point
   blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Select a Scenario to Start a Check', emoji: true } });

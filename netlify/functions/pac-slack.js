@@ -202,10 +202,10 @@ async function uploadFileToChannel(channel, filename, content, initialComment = 
   }
 }
 
-async function publishHomeTab(userId) {
+async function publishHomeTab(userId, activeResult = null) {
   const cases = await listCasesForManager(userId);
   cases.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-  return slackApi('views.publish', { user_id: userId, view: homeTabView(cases) });
+  return slackApi('views.publish', { user_id: userId, view: homeTabView(cases, activeResult) });
 }
 
 // ── Multi-workspace token resolution ─────────────────────────────────────
@@ -727,8 +727,6 @@ async function handleViewSubmission(payload) {
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
     const { caseId, scenario, scenarios = [scenario], refName } = meta;
     const questions = SCENARIO_QUESTIONS[scenario] || [];
-    // root_view_id = the intake modal (below questions in the stack)
-    const rootViewId = payload.view.root_view_id;
 
     const answers = questions.map((_, i) =>
       values?.[`${B.Q_PREFIX}${i}`]?.[`${A.Q_ANSWER_PREFIX}${i}`]?.selected_option?.value || 'unknown'
@@ -736,7 +734,6 @@ async function handleViewSubmission(payload) {
 
     const { level } = computeScore(questions, answers);
     const steps = (NEXT_STEPS[scenario] || {})[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
-    const resultView = resultModal({ scenario, level, caseId, refName: refName || '', steps });
 
     const now = new Date().toISOString();
     const autoNotify = !!refName;
@@ -751,11 +748,6 @@ async function handleViewSubmission(payload) {
     };
 
     (async () => {
-      // Show result modal via views.update — not subject to the 3s ack deadline
-      // Targets root_view_id (intake modal) which is revealed when we ack '' below
-      try { await slackApi('views.update', { view_id: rootViewId, view: resultView }); }
-      catch (e) { console.error('views.update error:', e); }
-
       try {
         await saveCase(caseRecord);
         const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
@@ -766,13 +758,13 @@ async function handleViewSubmission(payload) {
           emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
         ).catch(() => {});
         if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-        await publishHomeTab(userId);
+        // Publish App Home with result banner — user lands here after clear ack below
+        await publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps });
       } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
     })();
 
-    // Ack with empty string — closes the pushed questions modal, reveals intake below.
-    // The IIFE above immediately replaces intake with resultView via views.update.
-    return ack('');
+    // Clear all modals immediately — user lands on App Home which shows the result banner
+    return ack({ response_action: 'clear' });
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread
