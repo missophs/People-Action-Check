@@ -748,6 +748,11 @@ async function handleViewSubmission(payload) {
     };
 
     (async () => {
+      // Publish result to App Home FIRST — user lands there immediately after clear ack
+      try { await publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps }); }
+      catch (e) { console.error('publishHomeTab error:', e); }
+
+      // Background: save, DM, HR notify
       try {
         await saveCase(caseRecord);
         const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
@@ -758,8 +763,8 @@ async function handleViewSubmission(payload) {
           emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
         ).catch(() => {});
         if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-        // Publish App Home with result banner — user lands here after clear ack below
-        await publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps });
+        // Refresh App Home again once case is saved (updates session history)
+        publishHomeTab(userId).catch(() => {});
       } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
     })();
 
