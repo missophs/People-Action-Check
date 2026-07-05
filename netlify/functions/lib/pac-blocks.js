@@ -702,7 +702,7 @@ function homeTabView(cases = [], activeResult = null) {
       : '🟢  LOW RISK — Routine management action. Document each step.';
     blocks.push({ type: 'header', text: { type: 'plain_text', text: 'Your Result', emoji: true } });
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${header}*` } });
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}\n*Case ID:* \`${caseId}\`${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } });
     if (steps.length > 0) {
       blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Recommended Next Steps*\n${steps.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}` } });
     }
@@ -1412,7 +1412,6 @@ function caseFullExportMessage(rec, questions) {
       text: {
         type: 'mrkdwn',
         text: [
-          `*Case ID:*  \`${rec.id}\``,
           `*Date:*  ${date}`,
           `*Risk Level:*  ${risk.emoji}  *${risk.label.toUpperCase()}*`,
           rec.refName ? `*Reference:*  ${rec.refName}` : `*Type:*  Private self-check`,
