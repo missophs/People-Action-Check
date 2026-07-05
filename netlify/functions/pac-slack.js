@@ -16,7 +16,7 @@
 
 const crypto = require('crypto');
 const dataStore = require('./lib/data-store');
-const { SCENARIO_QUESTIONS, SCENARIO_META } = require('./lib/pac-data');
+const { SCENARIO_QUESTIONS, SCENARIO_META, NEXT_STEPS } = require('./lib/pac-data');
 const {
   computeScore,
   r,
@@ -24,6 +24,7 @@ const {
   slashResponseBlocks,
   intakeModal,
   questionsModal,
+  resultModal,
   resultDmMessage,
   hrTriageMessage,
   homeTabView,
@@ -758,7 +759,8 @@ async function handleViewSubmission(payload) {
       await publishHomeTab(userId);
     } catch (e) { console.error('MODAL_QUESTIONS error:', e); }
 
-    return ack({ response_action: 'clear' });
+    const steps = (NEXT_STEPS[scenario] || {})[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
+    return ack({ response_action: 'update', view: resultModal({ scenario, level, caseId, refName: refName || '', steps }) });
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread

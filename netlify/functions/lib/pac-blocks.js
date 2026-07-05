@@ -1483,6 +1483,38 @@ function caseFullExportMessage(rec, questions) {
   return { text: `Case export: ${rec.scenario} — ${rec.id}`, blocks };
 }
 
+function resultModal({ scenario, level, caseId, refName, steps = [] }) {
+  const risk = r(level);
+  const selfCheck = !refName;
+  const header = level === 'risk'
+    ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
+    : level === 'warn'
+    ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
+    : '🟢  LOW RISK — Routine management action. Document each step.';
+
+  const blocks = [
+    { type: 'section', text: { type: 'mrkdwn', text: `*${header}*` } },
+    { type: 'divider' },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}\n*Case ID:* \`${caseId}\`${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } },
+  ];
+
+  if (steps.length > 0) {
+    blocks.push({ type: 'divider' });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*RECOMMENDED NEXT STEPS*\n${steps.map((s, i) => `*${i + 1}.*  ${s}`).join('\n')}` } });
+  }
+
+  blocks.push({ type: 'divider' });
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📩  Full result sent to you via DM — includes your answers, documentation guidance, and next steps.` }] });
+
+  return {
+    type: 'modal',
+    callback_id: 'pac_modal_result',
+    title: { type: 'plain_text', text: 'Your Result' },
+    close: { type: 'plain_text', text: 'Close' },
+    blocks,
+  };
+}
+
 module.exports = {
   computeScore,
   r,
@@ -1490,6 +1522,7 @@ module.exports = {
   slashResponseBlocks,
   intakeModal,
   questionsModal,
+  resultModal,
   resultDmMessage,
   hrTriageMessage,
   homeTabView,
