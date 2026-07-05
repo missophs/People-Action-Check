@@ -296,7 +296,7 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${scenario}*${otherScenarios}\n${statusLine}  ·  \`${caseId}\``,
+        text: `*${scenario}*${otherScenarios}\n${statusLine}`,
       },
     },
     { type: 'divider' },
