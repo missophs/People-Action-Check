@@ -823,7 +823,7 @@ function homeTabView(cases = [], activeResult = null) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}${docsNote}  ·  \`${c.id}\``,
+          text: `${risk.emoji}  *${c.scenario}*${ref}\n${stateLabel(c.state)}  ·  ${date}${docsNote}`,
         },
       });
       blocks.push({
