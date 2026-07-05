@@ -793,7 +793,7 @@ function homeTabView(cases = [], activeResult = null) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${risk.emoji}  *${c.scenario}*${c.refName ? `  ·  ${c.refName}` : ''}\nSet for ${c.followupDate}  ·  \`${c.id}\``,
+          text: `${risk.emoji}  *${c.scenario}*${c.refName ? `  ·  ${c.refName}` : ''}\nSet for ${c.followupDate}`,
         },
         accessory: {
           type: 'button',
@@ -950,7 +950,7 @@ function managerFollowupMessage({ caseId, scenario, hrMessage, hrSlackId, level 
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${scenario}*  ·  \`${caseId}\`\nHR has a question about this case.`,
+        text: `*${scenario}*\nHR has a question about this case.`,
       },
     },
     { type: 'divider' },
