@@ -1526,6 +1526,32 @@ function resultModal({ scenario, level, caseId, refName, steps = [] }) {
 
   blocks.push({ type: 'divider' });
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `📩  Full result sent to you via DM — includes your answers, documentation guidance, and next steps.` }] });
+  blocks.push({ type: 'divider' });
+
+  const actionElements = [
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: 'Attach Files', emoji: true },
+      action_id: A.RESULT_UPLOAD_DOC,
+      value: caseId,
+    },
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: 'Open Web App', emoji: true },
+      action_id: A.RESULT_OPEN_WEB,
+      value: caseId,
+    },
+  ];
+  if (!selfCheck) {
+    actionElements.unshift({
+      type: 'button',
+      text: { type: 'plain_text', text: '💬  Message HR', emoji: true },
+      style: 'primary',
+      action_id: A.MGR_REPLY,
+      value: JSON.stringify({ caseId, scenario }),
+    });
+  }
+  blocks.push({ type: 'actions', elements: actionElements });
 
   return {
     type: 'modal',

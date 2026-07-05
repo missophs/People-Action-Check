@@ -747,12 +747,8 @@ async function handleViewSubmission(payload) {
       auditLog: [auditEntry(E.CASE_CREATED, userId, { scenario, scenarios, level, source: 'slack' })],
     };
 
+    // Background: save, DM, HR notify, App Home refresh — no timing constraint
     (async () => {
-      // Publish result to App Home FIRST — user lands there immediately after clear ack
-      try { await publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps }); }
-      catch (e) { console.error('publishHomeTab error:', e); }
-
-      // Background: save, DM, HR notify
       try {
         await saveCase(caseRecord);
         const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
@@ -763,13 +759,12 @@ async function handleViewSubmission(payload) {
           emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
         ).catch(() => {});
         if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-        // Refresh App Home again once case is saved (keep result banner visible)
-        publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps }).catch(() => {});
+        publishHomeTab(userId).catch(() => {});
       } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
     })();
 
-    // Clear all modals immediately — user lands on App Home which shows the result banner
-    return ack({ response_action: 'clear' });
+    // Replace questions modal with result modal — no await before this, fires instantly
+    return ack({ response_action: 'update', view: resultModal({ scenario, level, caseId, refName: refName || '', steps }) });
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread
