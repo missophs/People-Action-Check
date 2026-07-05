@@ -157,6 +157,10 @@ async function openModal(triggerId, view) {
   return slackApi('views.open', { trigger_id: triggerId, view });
 }
 
+async function pushModal(triggerId, view) {
+  return slackApi('views.push', { trigger_id: triggerId, view });
+}
+
 async function postEphemeral(channel, userId, blocks, text = 'People Action Check') {
   return slackApi('chat.postEphemeral', { channel, user: userId, blocks, text });
 }
@@ -430,7 +434,7 @@ async function handleBlockActions(payload) {
     const caseId = action.value;
     const rec = await findCaseById(caseId);
     const existingDocs = (rec?.attachments || []).map(f => ({ name: f.name, permalink: f.url }));
-    await openModal(payload.trigger_id, uploadDocModal(caseId, existingDocs));
+    await pushModal(payload.trigger_id, uploadDocModal(caseId, existingDocs));
     return ack();
   }
 
