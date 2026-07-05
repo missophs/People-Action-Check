@@ -763,8 +763,8 @@ async function handleViewSubmission(payload) {
           emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
         ).catch(() => {});
         if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-        // Refresh App Home again once case is saved (updates session history)
-        publishHomeTab(userId).catch(() => {});
+        // Refresh App Home again once case is saved (keep result banner visible)
+        publishHomeTab(userId, { scenario, level, caseId, refName: refName || '', steps }).catch(() => {});
       } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
     })();
 
