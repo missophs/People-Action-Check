@@ -1518,7 +1518,7 @@ function resultModal({ scenario, level, caseId, refName, steps = [] }) {
   const blocks = [
     { type: 'section', text: { type: 'mrkdwn', text: `*${header}*` } },
     { type: 'divider' },
-    { type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}\n*Case ID:* \`${caseId}\`${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Scenario:* ${scenario}${refName ? `\n*Reference:* ${refName}` : '\n_Private self-check — HR not notified_'}` } },
   ];
 
   if (steps.length > 0) {
