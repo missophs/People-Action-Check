@@ -992,7 +992,7 @@ function managerReplyModal(caseId, scenario) {
     blocks: [
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: `*${scenario}*  ·  Case \`${caseId}\`\nYour message goes directly to the HR team — not visible to anyone else.` },
+        text: { type: 'mrkdwn', text: `*${scenario}*\nYour message goes directly to the HR team — not visible to anyone else.` },
       },
       { type: 'divider' },
       {
@@ -1071,7 +1071,7 @@ function caseReassignedDmMessage({ caseId, scenario, level, state, previousManag
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${risk.emoji}  *${scenario}*  ·  ${risk.label}\n\`${caseId}\`  ·  Previously held by <@${previousManagerId}>`,
+        text: `${risk.emoji}  *${scenario}*  ·  ${risk.label}\nPreviously held by <@${previousManagerId}>`,
       },
     },
     { type: 'divider' },
@@ -1098,7 +1098,7 @@ function caseReassignedDmMessage({ caseId, scenario, level, state, previousManag
     },
   ];
   return {
-    text: `Case \`${caseId}\` has been reassigned to you — ${risk.label}: ${scenario}`,
+    text: `A ${scenario} case has been reassigned to you — ${risk.label}`,
     attachments: [{ color: risk.color, blocks }],
   };
 }
@@ -1123,7 +1123,7 @@ function caseListBlocks(cases) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${risk.emoji}  *${c.scenario}*\n${stateLabel(c.state)}  ·  \`${c.id}\`  ·  ${date}`,
+        text: `${risk.emoji}  *${c.scenario}*\n${stateLabel(c.state)}  ·  ${date}`,
       },
     });
   });
@@ -1152,7 +1152,7 @@ function handoffBlocks({ caseId, reason }) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${msgs[reason] || 'Continue in the web app for full functionality.'}\nCase: \`${caseId}\``,
+        text: msgs[reason] || 'Continue in the web app for full functionality.',
       },
       accessory: {
         type: 'button',
@@ -1374,7 +1374,7 @@ function uploadDocModal(caseId, existingDocs = []) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Case \`${caseId}\`* — attach supporting documentation`,
+          text: `Attach supporting documentation to this case`,
         },
       },
       {
@@ -1504,7 +1504,7 @@ function caseFullExportMessage(rec, questions) {
     elements: [{ type: 'mrkdwn', text: `Case exported  ·  ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}  ·  People Action Check` }],
   });
 
-  return { text: `Case export: ${rec.scenario} — ${rec.id}`, blocks };
+  return { text: `Case export: ${rec.scenario}`, blocks };
 }
 
 function resultModal({ scenario, level, caseId, refName, steps = [] }) {

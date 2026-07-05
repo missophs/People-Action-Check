@@ -434,7 +434,12 @@ async function handleBlockActions(payload) {
     const caseId = action.value;
     const rec = await findCaseById(caseId);
     const existingDocs = (rec?.attachments || []).map(f => ({ name: f.name, permalink: f.url }));
-    await pushModal(payload.trigger_id, uploadDocModal(caseId, existingDocs));
+    const modal = uploadDocModal(caseId, existingDocs);
+    if (payload.view) {
+      await pushModal(payload.trigger_id, modal);
+    } else {
+      await openModal(payload.trigger_id, modal);
+    }
     return ack();
   }
 
@@ -548,7 +553,12 @@ async function handleBlockActions(payload) {
   if (actionId === A.MGR_REPLY) {
     let caseId, scenario;
     try { ({ caseId, scenario } = JSON.parse(action.value)); } catch { caseId = action.value; scenario = ''; }
-    await openModal(triggerId, managerReplyModal(caseId, scenario));
+    const modal = managerReplyModal(caseId, scenario);
+    if (payload.view) {
+      await pushModal(triggerId, modal);
+    } else {
+      await openModal(triggerId, modal);
+    }
     return ack();
   }
 
@@ -1151,7 +1161,6 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  console.log('PAC_SKIP_SIG_VERIFY:', process.env.PAC_SKIP_SIG_VERIFY);
   console.log('method:', event.httpMethod);
   if (!verifySignature(event)) {
     console.error('Slack signature verification failed');
