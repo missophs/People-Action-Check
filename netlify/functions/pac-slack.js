@@ -732,10 +732,13 @@ async function handleViewSubmission(payload) {
       values?.[`${B.Q_PREFIX}${i}`]?.[`${A.Q_ANSWER_PREFIX}${i}`]?.selected_option?.value || 'unknown'
     );
 
+    // Compute score synchronously so we can ack immediately (Slack 3s deadline)
     const { level } = computeScore(questions, answers);
+    const steps = (NEXT_STEPS[scenario] || {})[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
+
+    // Fire background work without awaiting — must not block the ack
     const now = new Date().toISOString();
     const autoNotify = !!refName;
-
     const caseRecord = {
       id: caseId, scenario, scenarios, refName,
       managerId: userId, source: 'slack',
@@ -745,21 +748,22 @@ async function handleViewSubmission(payload) {
       followupCount: 0, hrNotified: false,
       auditLog: [auditEntry(E.CASE_CREATED, userId, { scenario, scenarios, level, source: 'slack' })],
     };
+    (async () => {
+      try {
+        await saveCase(caseRecord);
+        const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
+        const dm = await postMessage(userId, dmMsg);
+        if (dm.ok) await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
+        if (autoNotify) { try { await notifyHrCore(caseId, userId); } catch {} }
+        getSlackUserEmail(userId).then(email =>
+          emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
+        ).catch(() => {});
+        if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
+        await publishHomeTab(userId);
+      } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
+    })();
 
-    try {
-      await saveCase(caseRecord);
-      const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
-      const dm = await postMessage(userId, dmMsg);
-      if (dm.ok) await saveCase({ ...caseRecord, dmTs: dm.ts, dmChannelId: dm.channel });
-      if (autoNotify) await notifyHrCore(caseId, userId);
-      getSlackUserEmail(userId).then(email =>
-        emailNotify.notifyManagerResult({ managerEmail: email, scenario, level, caseId, refName: refName || '', selfCheck: !refName })
-      ).catch(() => {});
-      if (level === 'risk') await postEphemeral(dm.channel || userId, userId, handoffBlocks({ caseId, reason: 'high_risk' }));
-      await publishHomeTab(userId);
-    } catch (e) { console.error('MODAL_QUESTIONS error:', e); }
-
-    const steps = (NEXT_STEPS[scenario] || {})[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
+    // Ack immediately — result modal replaces questions modal in place
     return ack({ response_action: 'update', view: resultModal({ scenario, level, caseId, refName: refName || '', steps }) });
   }
 
