@@ -121,7 +121,7 @@ async function notifyManagerResult({ managerEmail, scenario, level, caseId, refN
 
   const label     = RISK_LABELS[level] || level;
   const isHigh    = level === 'risk';
-  const subjectTag = selfCheck ? 'Self-Check' : `Case ${caseId}`;
+  const subjectTag = selfCheck ? 'Self-Check' : scenario;
 
   const html = emailShell('Check Complete', `
     <p style="margin:0 0 16px">Your People Action Check for <strong>${scenario}</strong> is complete.</p>
@@ -132,8 +132,6 @@ async function notifyManagerResult({ managerEmail, scenario, level, caseId, refN
           <td style="font-size:14px">${refName}</td></tr>` : ''}
       <tr><td style="color:#64748b;font-size:13px;padding:4px 12px 4px 0">Mode</td>
           <td style="font-size:14px">${selfCheck ? '🔒 Self-check — HR not notified' : 'Standard'}</td></tr>
-      <tr><td style="color:#64748b;font-size:13px;padding:4px 12px 4px 0">Case ID</td>
-          <td style="font-size:14px;font-family:monospace">${caseId}</td></tr>
     </table>
     ${isHigh && !selfCheck ? `<p style="background:#fef2f2;border-left:3px solid #f43f5e;padding:10px 14px;border-radius:4px;font-size:13px;margin:0">
       High Risk result — consider notifying HR if you have not already done so.
@@ -142,7 +140,7 @@ async function notifyManagerResult({ managerEmail, scenario, level, caseId, refN
 
   await sendEmail({
     to:      managerEmail,
-    subject: `People Action Check — ${label} — ${subjectTag}`,
+    subject: `People Action Check — ${label} — ${scenario}`,
     html,
   });
 }
@@ -213,14 +211,14 @@ async function notifyDocumentUploaded({ managerEmail, hrEmail, caseId, scenario,
   if (attachments.length === 0) return; // nothing to send
 
   const body = `
-    <p style="margin:0 0 16px">${uploaderLabel} has added ${attachments.length} document${attachments.length > 1 ? 's' : ''} to case <code>${caseId}</code> (${scenario}).</p>
+    <p style="margin:0 0 16px">${uploaderLabel} has added ${attachments.length} document${attachments.length > 1 ? 's' : ''} to your ${scenario} check.</p>
     <ul style="margin:0 0 16px;padding-left:20px;font-size:14px">
       ${attachments.map(a => `<li>${a.name}</li>`).join('')}
     </ul>
     <p style="font-size:13px;color:#64748b;margin:0">Files are attached to this email for download.</p>
   `;
   const html    = emailShell('Documents Uploaded', body);
-  const subject = `People Action Check — Documents Added — Case ${caseId}`;
+  const subject = `People Action Check — Documents Added — ${scenario}`;
 
   const recipients = [managerEmail, hrEmail].filter(Boolean);
   if (recipients.length === 0) return;
@@ -232,7 +230,7 @@ async function notifyDocumentUploaded({ managerEmail, hrEmail, caseId, scenario,
 async function notifyManagerOfHrReply({ managerEmail, caseId, scenario, message, hrNote = '' }) {
   if (!managerEmail) return;
   const html = emailShell('HR Follow-up', `
-    <p style="margin:0 0 16px">HR has sent a message regarding case <code>${caseId}</code> (${scenario}).</p>
+    <p style="margin:0 0 16px">HR has sent a message regarding your ${scenario} check.</p>
     <blockquote style="border-left:3px solid #e2e8f0;padding:10px 14px;margin:0 0 16px;color:#374151;font-size:14px">
       ${message.replace(/\n/g, '<br>')}
     </blockquote>
@@ -241,7 +239,7 @@ async function notifyManagerOfHrReply({ managerEmail, caseId, scenario, message,
   `);
   await sendEmail({
     to:      managerEmail,
-    subject: `People Action Check — HR Follow-up — Case ${caseId}`,
+    subject: `People Action Check — HR Follow-up — ${scenario}`,
     html,
   });
 }
@@ -250,7 +248,7 @@ async function notifyManagerOfHrReply({ managerEmail, caseId, scenario, message,
 async function notifyHrOfManagerReply({ hrEmail, caseId, scenario, message }) {
   if (!hrEmail) return;
   const html = emailShell('Manager Reply', `
-    <p style="margin:0 0 16px">The manager has replied on case <code>${caseId}</code> (${scenario}).</p>
+    <p style="margin:0 0 16px">The manager has replied on the ${scenario} check.</p>
     <blockquote style="border-left:3px solid #e2e8f0;padding:10px 14px;margin:0 0 16px;color:#374151;font-size:14px">
       ${message.replace(/\n/g, '<br>')}
     </blockquote>
@@ -258,7 +256,7 @@ async function notifyHrOfManagerReply({ hrEmail, caseId, scenario, message }) {
   `);
   await sendEmail({
     to:      hrEmail,
-    subject: `People Action Check — Manager Reply — Case ${caseId}`,
+    subject: `People Action Check — Manager Reply — ${scenario}`,
     html,
   });
 }

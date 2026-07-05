@@ -451,7 +451,7 @@ async function handleBlockActions(payload) {
       ).catch(() => {});
     }
     await postEphemeral(channelId || userId, userId, [
-      { type: 'section', text: { type: 'mrkdwn', text: `✉️  Your People Action Check report for case \`${caseId}\` is on its way to your inbox.` } },
+      { type: 'section', text: { type: 'mrkdwn', text: `✉️  Your People Action Check report is on its way to your inbox.` } },
     ]);
     return ack();
   }
@@ -654,10 +654,10 @@ async function handleHrTransition(caseId, hrUserId, newState, auditEvent) {
 
   // Notify manager of state change
   const msgs = {
-    ACKNOWLEDGED: `👀  HR has acknowledged your People Action Check for *${updated.scenario}* (case \`${caseId}\`). They will follow up in Slack.`,
-    UNDER_REVIEW: `🔍  HR has marked your *${updated.scenario}* case under review (case \`${caseId}\`).`,
-    ESCALATED:    `🚨  Your *${updated.scenario}* case has been escalated for additional review (case \`${caseId}\`).`,
-    CLOSED:       `✅  Your People Action Check for *${updated.scenario}* has been closed by HR (case \`${caseId}\`).`,
+    ACKNOWLEDGED: `👀  HR has acknowledged your People Action Check for *${updated.scenario}*. They will follow up in Slack.`,
+    UNDER_REVIEW: `🔍  HR has marked your *${updated.scenario}* case under review.`,
+    ESCALATED:    `🚨  Your *${updated.scenario}* case has been escalated for additional review.`,
+    CLOSED:       `✅  Your People Action Check for *${updated.scenario}* has been closed by HR.`,
   };
   const notifyText = msgs[newState];
   if (notifyText) {
@@ -862,7 +862,7 @@ async function handleViewSubmission(payload) {
     }
 
     const risk = r(updated.risk || 'good');
-    const closeText = `✅  Your People Action Check for *${updated.scenario}* has been resolved by HR (case \`${caseId}\`)${note ? `.\n\n_${note}_` : '.'}`;
+    const closeText = `✅  Your People Action Check for *${updated.scenario}* has been resolved by HR.${note ? `\n\n_${note}_` : ''}`;
     await postMessage(
       updated.managerId,
       { text: closeText, attachments: [{ color: risk.color, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: closeText } }] }] }
@@ -899,7 +899,7 @@ async function handleViewSubmission(payload) {
 
     await postMessage(userId, [{
       type: 'section',
-      text: { type: 'mrkdwn', text: `✅  Your reply on case \`${caseId}\` has been sent to HR.` },
+      text: { type: 'mrkdwn', text: `✅  Your reply has been sent to HR.` },
     }]);
 
     // Email HR with manager's reply (fire-and-forget)
@@ -956,8 +956,8 @@ async function handleViewSubmission(payload) {
     // Confirm to manager
     const hrNotice = rec.hrNotified ? ' HR has been notified and will receive these documents.' : '';
     const confirmText = fileRefs.length > 0
-      ? `✅  ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} attached to case \`${caseId}\`.${hrNotice}`
-      : `No files were attached to case \`${caseId}\`.`;
+      ? `✅  ${fileRefs.length} file${fileRefs.length > 1 ? 's' : ''} attached.${hrNotice}`
+      : `No files were attached.`;
 
     await postMessage(userId, [{ type: 'section', text: { type: 'mrkdwn', text: confirmText } }]);
 

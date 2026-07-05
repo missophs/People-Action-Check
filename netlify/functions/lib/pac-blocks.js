@@ -278,7 +278,9 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     ? '✅  Sent to HR'
     : '⏳  Awaiting HR';
 
-  const riskHeader = level === 'risk'
+  const riskHeader = scenario === 'Reduction in Force'
+    ? '🔴  CONNECT WITH HR — A Reduction in Force requires HR involvement before any action is taken.'
+    : level === 'risk'
     ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
     : level === 'warn'
     ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
@@ -695,7 +697,9 @@ function homeTabView(cases = [], activeResult = null) {
   if (activeResult) {
     const { scenario, level, caseId, refName, steps = [] } = activeResult;
     const risk = r(level);
-    const header = level === 'risk'
+    const header = scenario === 'Reduction in Force'
+      ? '🔴  CONNECT WITH HR — A Reduction in Force requires HR involvement before any action is taken.'
+      : level === 'risk'
       ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
       : level === 'warn'
       ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
