@@ -727,16 +727,17 @@ async function handleViewSubmission(payload) {
     try { meta = JSON.parse(payload.view.private_metadata || '{}'); } catch {}
     const { caseId, scenario, scenarios = [scenario], refName } = meta;
     const questions = SCENARIO_QUESTIONS[scenario] || [];
+    // root_view_id = the intake modal (below questions in the stack)
+    const rootViewId = payload.view.root_view_id;
 
     const answers = questions.map((_, i) =>
       values?.[`${B.Q_PREFIX}${i}`]?.[`${A.Q_ANSWER_PREFIX}${i}`]?.selected_option?.value || 'unknown'
     );
 
-    // Compute score synchronously so we can ack immediately (Slack 3s deadline)
     const { level } = computeScore(questions, answers);
     const steps = (NEXT_STEPS[scenario] || {})[level === 'good' ? 'good' : level === 'warn' ? 'warn' : 'risk'] || [];
+    const resultView = resultModal({ scenario, level, caseId, refName: refName || '', steps });
 
-    // Fire background work without awaiting — must not block the ack
     const now = new Date().toISOString();
     const autoNotify = !!refName;
     const caseRecord = {
@@ -748,7 +749,13 @@ async function handleViewSubmission(payload) {
       followupCount: 0, hrNotified: false,
       auditLog: [auditEntry(E.CASE_CREATED, userId, { scenario, scenarios, level, source: 'slack' })],
     };
+
     (async () => {
+      // Show result modal via views.update — not subject to the 3s ack deadline
+      // Targets root_view_id (intake modal) which is revealed when we ack '' below
+      try { await slackApi('views.update', { view_id: rootViewId, view: resultView }); }
+      catch (e) { console.error('views.update error:', e); }
+
       try {
         await saveCase(caseRecord);
         const dmMsg = resultDmMessage({ scenario, scenarios, level, caseId, hrNotified: autoNotify, refName: refName || '', answers, questions });
@@ -763,8 +770,9 @@ async function handleViewSubmission(payload) {
       } catch (e) { console.error('MODAL_QUESTIONS background error:', e); }
     })();
 
-    // Ack immediately — result modal replaces questions modal in place
-    return ack({ response_action: 'update', view: resultModal({ scenario, level, caseId, refName: refName || '', steps }) });
+    // Ack with empty string — closes the pushed questions modal, reveals intake below.
+    // The IIFE above immediately replaces intake with resultView via views.update.
+    return ack('');
   }
 
   // pac_modal_hr_reply → DM manager + post to HR thread
