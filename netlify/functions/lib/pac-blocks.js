@@ -1508,7 +1508,7 @@ function resultModal({ scenario, level, caseId, refName, steps = [] }) {
   const risk = r(level);
   const selfCheck = !refName;
   const header = scenario === 'Reduction in Force'
-    ? '🔴  CONTACT HR — A Reduction in Force requires HR involvement before any action is taken.'
+    ? '🔴  CONNECT WITH HR — A Reduction in Force requires HR involvement before any action is taken.'
     : level === 'risk'
     ? '🔴  HIGH RISK — Stop. HR clearance required before any action.'
     : level === 'warn'
