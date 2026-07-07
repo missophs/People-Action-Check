@@ -48,3 +48,26 @@ Performance Decline, Attendance Issue, Interpersonal Conflict, Policy Violation,
 ## Writing Preferences
 
 Direct, no filler. Active voice. Short sentences. No em dashes.
+
+## Engineering Workflow
+
+Before making any code changes:
+
+- Read the relevant files to understand the feature.
+- Identify all related issues before editing.
+- Fix root causes before downstream symptoms.
+
+When making changes:
+
+- Batch related fixes together.
+- Do not stop after fixing the first bug.
+- Continue searching for related issues in the same area of the code.
+- Avoid unnecessary repository rescans.
+- Preserve existing functionality.
+- Make the smallest safe changes.
+
+Before finishing:
+
+- Validate all modified code.
+- Check for regressions.
+- Summarize every fix made and identify any remaining issues.
