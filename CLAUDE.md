@@ -51,23 +51,104 @@ Direct, no filler. Active voice. Short sentences. No em dashes.
 
 ## Engineering Workflow
 
+## Engineering Workflow
+
+### Primary Objective
+
+Deliver complete, production-ready solutions while minimizing unnecessary iterations, repository rescans, and token usage.
+
+Always understand the problem before modifying code.
+
+---
+
+### Investigation
+
 Before making any code changes:
 
-- Read the relevant files to understand the feature.
-- Identify all related issues before editing.
-- Fix root causes before downstream symptoms.
+Read every file related to the requested feature.
 
-When making changes:
+Understand how the affected code interacts with the rest of the application.
 
-- Batch related fixes together.
-- Do not stop after fixing the first bug.
-- Continue searching for related issues in the same area of the code.
-- Avoid unnecessary repository rescans.
-- Preserve existing functionality.
-- Make the smallest safe changes.
+Identify every related issue before editing.
 
-Before finishing:
+Determine the root cause before implementing fixes.
 
-- Validate all modified code.
-- Check for regressions.
-- Summarize every fix made and identify any remaining issues.
+If multiple issues originate from the same root cause, resolve them together.
+
+Do not edit the first file that appears to contain an error until the surrounding workflow has been analyzed.
+
+---
+
+### Implementation
+
+Fix root causes before downstream symptoms.
+
+Batch related fixes into a single implementation whenever practical.
+
+Continue investigating after the first successful fix to identify additional issues in the same workflow.
+
+Preserve existing functionality unless a behavior change is explicitly requested.
+
+Avoid unnecessary refactoring.
+
+Avoid formatting-only edits.
+
+Keep changes focused, reviewable, and consistent with the existing architecture.
+
+Do not repeatedly rescan unchanged files unless new evidence indicates they are contributing to the problem.
+
+---
+
+### Validation
+
+After all planned edits are complete:
+
+Review every modified file.
+
+Check for JavaScript runtime errors.
+
+Check the browser console for errors or warnings.
+
+Verify the complete user workflow affected by the change.
+
+Verify LocalStorage behavior if affected.
+
+Verify risk scoring logic if affected.
+
+Verify report generation if affected.
+
+Verify Brevo email delivery if affected.
+
+Verify Slack notifications if affected.
+
+Verify Microsoft Teams notifications if affected.
+
+Verify Netlify Functions if affected.
+
+Verify responsive behavior on desktop and mobile.
+
+Confirm accessibility has not regressed.
+
+Perform one consolidated validation after all planned work instead of validating after every individual edit whenever practical.
+
+---
+
+### Completion
+
+Do not stop after the first successful fix if additional related issues are likely.
+
+Continue until no significant issues remain within the requested scope.
+
+Before completing the task, provide a concise summary including:
+
+* Root cause
+* Files modified
+* Related issues resolved
+* Remaining risks or limitations
+* Recommended follow-up work, if any
+
+Keep implementation updates concise.
+
+Prioritize solving problems over explaining every intermediate step.
+
+When multiple safe improvements are closely related to the requested work, complete them during the same implementation rather than creating unnecessary follow-up iterations.
