@@ -8,9 +8,9 @@
 //   PAC_ADMIN_TOKEN          — shared with case-store.js (write auth)
 //
 // Slack app configuration:
-//   Slash command URL:         https://peopleactioncheck.netlify.app/api/pac-slack
-//   Interactivity Request URL: https://peopleactioncheck.netlify.app/api/pac-slack
-//   Event Subscriptions URL:   https://peopleactioncheck.netlify.app/api/pac-slack
+//   Slash command URL:         https://pachr.netlify.app/api/pac-slack
+//   Interactivity Request URL: https://pachr.netlify.app/api/pac-slack
+//   Event Subscriptions URL:   https://pachr.netlify.app/api/pac-slack
 //   Required event: app_home_opened
 //   Required scopes: commands, chat:write, im:write, views:publish, views:open, users:read, users:read.email, files:read
 
@@ -97,7 +97,7 @@ async function getSlackUserEmail(userId) {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const WEB_APP_URL = 'https://peopleactioncheck.netlify.app';
+const WEB_APP_URL = process.env.WEB_APP_URL || 'https://pachr.netlify.app';
 
 const HEADERS = { 'Content-Type': 'application/json' };
 
