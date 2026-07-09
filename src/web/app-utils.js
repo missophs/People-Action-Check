@@ -77,6 +77,6 @@ function computeScore(qs, answers) {
     if(a==="no")  { no++;  wNo+=item.weight;        if(item.critical) crit=true; }
     if(a==="unknown") { unk++; wNo+=item.weight*0.75; if(item.critical) crit=true; }
   });
-  var ratio = wNo/total;
+  var ratio = total > 0 ? wNo/total : 0;
   return { level:crit?"risk":ratio<=0.15?"good":ratio<=0.45?"warn":"risk", crit:crit, unk:unk, yes:yes, no:no };
 }
