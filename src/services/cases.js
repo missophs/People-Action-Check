@@ -1,6 +1,10 @@
-// Client for /api/case-store — shared by web surface and pac-slack Netlify function (Phase 4).
-// Web: import directly (ES module).
-// Slack function: require via .cjs wrapper or set "type": "module" in package.json.
+// Client for /api/case-store — used by the web surface (browser).
+//
+// SECURITY: Browser code must NEVER pass PAC_ADMIN_TOKEN as the token argument.
+// PAC_ADMIN_TOKEN is a server-side secret; it is not available in the browser environment
+// and must never be embedded in client-side code or public env vars (VITE_, PUBLIC_, etc.).
+// Admin-only operations (listCases with no managerId, saveCase, deleteCase) must be
+// performed from backend-only Netlify Functions, not from browser code.
 
 const BASE = "/api/case-store";
 
