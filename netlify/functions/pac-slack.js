@@ -15,6 +15,9 @@
 //   Required scopes: commands, chat:write, im:write, views:publish, views:open, users:read, users:read.email, files:read
 
 const crypto = require('crypto');
+const { slackApi } = require('./lib/slack-client.cjs');
+const { SKIP_SIG_VERIFY, IS_PRODUCTION } = require('./lib/secrets.cjs');
+// createExportId and generateExport are ESM — imported dynamically inside async handlers below.
 const dataStore = require('./lib/data-store');
 const { SCENARIO_QUESTIONS } = require('./lib/pac-data');
 const {
@@ -116,24 +119,8 @@ function newCaseId() {
   return `pac_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-// ── Slack API ─────────────────────────────────────────────────────────────
-
-async function slackApi(method, body) {
-  const token = process.env.PAC_SLACK_BOT_TOKEN;
-  const res = await fetch(`https://slack.com/api/${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    console.error(`Slack ${method} error:`, data.error, JSON.stringify(body).slice(0, 200));
-  }
-  return data;
-}
+// ── Slack API helpers ─────────────────────────────────────────────────────
+// slackApi() is imported from ./lib/slack-client — do not read PAC_SLACK_BOT_TOKEN here.
 
 // postMessage accepts either a blocks array OR a pre-built { text, attachments } object
 async function postMessage(channel, msgOrBlocks, fallbackText = 'People Action Check', opts = {}) {
@@ -168,7 +155,16 @@ async function publishHomeTab(userId) {
 
 function verifySignature(event) {
   const secret = process.env.PAC_SLACK_SIGNING_SECRET;
-  if (!secret) { console.warn('PAC_SLACK_SIGNING_SECRET not set'); return true; }
+  if (!secret) {
+    // In production a missing signing secret must fail closed.
+    // Allow skip only when PAC_SKIP_SIG_VERIFY=true and not in production.
+    if (IS_PRODUCTION || !SKIP_SIG_VERIFY) {
+      console.error('PAC_SLACK_SIGNING_SECRET not set — rejecting request');
+      return false;
+    }
+    console.warn('Skipping signature verification (PAC_SKIP_SIG_VERIFY=true, non-production)');
+    return true;
+  }
   const ts  = event.headers['x-slack-request-timestamp'] || event.headers['X-Slack-Request-Timestamp'] || '';
   const sig = event.headers['x-slack-signature']         || event.headers['X-Slack-Signature']         || '';
   if (!ts || !sig) return false;
@@ -931,32 +927,41 @@ async function handleViewSubmission(payload) {
   }
 
   if (callbackId === C.MODAL_EXPORT_CASES) {
-    const isHr   = payload.view.private_metadata === 'hr';
+    const isHr    = payload.view.private_metadata === 'hr';
     const format  = values?.[B.EXPORT_FORMAT]?.[A.EXPORT_FORMAT]?.selected_option?.value || 'csv';
     const filter  = isHr ? (values?.[B.EXPORT_FILTER]?.[A.EXPORT_FILTER]?.selected_option?.value || 'all') : 'manager';
     const delivery = values?.[B.EXPORT_DELIVERY]?.[A.EXPORT_DELIVERY]?.selected_option?.value || 'link';
     const emailInput = values?.[B.EXPORT_EMAIL]?.[A.EXPORT_EMAIL]?.value?.trim() || '';
 
-    const token  = process.env.PAC_ADMIN_TOKEN;
-    const filterParam = filter === 'all' ? '' : `&filter=${filter}`;
-    const base   = `${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`;
-
+    // PAC_ADMIN_TOKEN must never appear in URLs or Slack messages.
+    // Link delivery uses a short-lived exportId; email delivery generates inline.
     const FORMAT_LABELS = {
-      csv: 'CSV (Excel / Google Sheets)',
+      csv:  'CSV (Excel / Google Sheets)',
       word: 'Word doc (.doc)',
-      tsv: 'TSV (Excel tab-separated)',
+      tsv:  'TSV (Excel tab-separated)',
       json: 'JSON',
     };
 
     if (delivery === 'link') {
-      await postMessage(userId, [{
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*Your export is ready*\n<${base}|Download ${FORMAT_LABELS[format]}>\n\nFor SharePoint, you can also email this to your document library address.` },
-      }]);
+      try {
+        const { createExportId } = require('./export-cases.cjs');
+        const exportId = await createExportId({ format, filter, managerId: filter === 'manager' ? userId : undefined });
+        const safeUrl  = `${WEB_APP_URL}/api/export-cases?exportId=${exportId}`;
+        await postMessage(userId, [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Your export is ready*\n<${safeUrl}|Download ${FORMAT_LABELS[format]}>\n\nLink expires in 1 hour. For SharePoint, you can also email this to your document library address.` },
+        }]);
+      } catch (e) {
+        console.error('Export link generation failed:', e.message);
+        await postMessage(userId, [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `Export failed: ${e.message}. Please contact your administrator.` },
+        }]);
+      }
       return ack('');
     }
 
-    // Email delivery
+    // Email delivery — generate export server-side; no token in URL
     let toEmail = emailInput;
     if (delivery === 'email_self') {
       const hrEmail = await getHrEmail().catch(() => null);
@@ -967,20 +972,21 @@ async function handleViewSubmission(payload) {
     }
 
     try {
-      const res = await fetch(`${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: toEmail }),
-      });
-      if (!res.ok) throw new Error(`Export API ${res.status}`);
+      const { generateExport } = await import('./lib/export-generator.js');
+      const cases = filter === 'manager'
+        ? await listCasesForManager(userId)
+        : await listAllCases();
+      const { content, mime, ext } = generateExport(cases, format);
+      await emailNotify.sendExportEmail({ toEmail, format, mime, ext, content, FORMAT_LABELS });
       await postMessage(userId, [{
         type: 'section',
         text: { type: 'mrkdwn', text: `*Export sent*\nA ${FORMAT_LABELS[format]} file was emailed to \`${toEmail}\`.` },
       }]);
     } catch (e) {
+      console.error('Export email failed:', e.message);
       await postMessage(userId, [{
         type: 'section',
-        text: { type: 'mrkdwn', text: `Export failed: ${e.message}. Try the download link instead: <${base}|${FORMAT_LABELS[format]}>` },
+        text: { type: 'mrkdwn', text: `Export failed: ${e.message}. Please contact your administrator.` },
       }]);
     }
     return ack('');
@@ -999,15 +1005,12 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  console.log('PAC_SKIP_SIG_VERIFY:', process.env.PAC_SKIP_SIG_VERIFY);
-  console.log('method:', event.httpMethod);
   if (!verifySignature(event)) {
     console.error('Slack signature verification failed');
     return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   const parsed = parseBody(event);
-  console.log('parsed command:', parsed.command, 'type:', parsed.type);
 
   // URL verification (Events API)
   if (parsed.type === 'url_verification') {
