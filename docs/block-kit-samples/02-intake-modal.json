@@ -1,0 +1,142 @@
+{
+  "type": "modal",
+  "callback_id": "pac_modal_intake",
+  "title": {
+    "type": "plain_text",
+    "text": "People Action Check"
+  },
+  "submit": {
+    "type": "plain_text",
+    "text": "Continue"
+  },
+  "close": {
+    "type": "plain_text",
+    "text": "Cancel"
+  },
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*What situation are you navigating?*\nSelect the scenario that best describes the employee situation you are reviewing."
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_scenario",
+      "label": {
+        "type": "plain_text",
+        "text": "Scenario(s)"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "Select all that apply. Questions will be drawn from the primary (first) scenario selected."
+      },
+      "element": {
+        "type": "multi_static_select",
+        "action_id": "pac_intake_scenario_select",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "Choose one or more scenarios…"
+        },
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Performance Decline"
+            },
+            "value": "Performance Decline"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Attendance Issue"
+            },
+            "value": "Attendance Issue"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Interpersonal Conflict"
+            },
+            "value": "Interpersonal Conflict"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Policy Violation"
+            },
+            "value": "Policy Violation"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Termination Consideration"
+            },
+            "value": "Termination Consideration"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Accommodation Request"
+            },
+            "value": "Accommodation Request"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Harassment / Discrimination"
+            },
+            "value": "Harassment / Discrimination"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Retaliation Concern"
+            },
+            "value": "Retaliation Concern"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Reduction in Force"
+            },
+            "value": "Reduction in Force"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Leave of Absence"
+            },
+            "value": "Leave of Absence"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_ref_name",
+      "optional": true,
+      "label": {
+        "type": "plain_text",
+        "text": "Leave blank for a private self-check. Add a note if you may escalate to HR."
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "A note here does not notify HR by itself — it just keeps that option open later and helps you find this case again. Never shown to HR."
+      },
+      "element": {
+        "type": "plain_text_input",
+        "action_id": "pac_intake_ref_name",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "e.g. J.D. or any short code you’ll recognize"
+        },
+        "max_length": 80
+      }
+    }
+  ]
+}

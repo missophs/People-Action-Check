@@ -1,0 +1,97 @@
+{
+  "text": "People Action Check — Low Risk: Performance Decline",
+  "attachments": [
+    {
+      "color": "#34d399",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*People Action Check  ·  Result*"
+          }
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Scenario*\nPerformance Decline"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Risk Level*\n🟢  Low Risk"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Case ID*\n`pac_abc123`"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Status*\n⏳  Pending notification"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "🟢  *Low Risk — routine situation.*\nProceed with careful documentation following standard process."
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Recommended next steps:*\n•  Schedule a documented performance conversation this week with specific examples.\n•  Issue a written memo confirming expectations, the gap, and what success looks like. Get a signature.\n•  Set a structured check-in date 2–4 weeks out and put it on the calendar."
+          }
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "actions",
+          "elements": [
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Notify HR",
+                "emoji": true
+              },
+              "style": "primary",
+              "action_id": "pac_result_notify_hr",
+              "value": "pac_abc123"
+            },
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Upload Documentation",
+                "emoji": true
+              },
+              "action_id": "pac_result_upload_doc",
+              "value": "pac_abc123"
+            },
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Open Web App",
+                "emoji": true
+              },
+              "action_id": "pac_result_open_web",
+              "value": "pac_abc123"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

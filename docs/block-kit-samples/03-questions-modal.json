@@ -1,0 +1,233 @@
+{
+  "type": "modal",
+  "callback_id": "pac_modal_questions",
+  "title": {
+    "type": "plain_text",
+    "text": "Risk Assessment"
+  },
+  "submit": {
+    "type": "plain_text",
+    "text": "See Result"
+  },
+  "close": {
+    "type": "plain_text",
+    "text": "Back"
+  },
+  "private_metadata": "{\"caseId\":\"pac_abc123\"}",
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Performance Decline*\nAnswer each question based on what you know right now. Answer honestly — the risk level is only useful if it reflects reality."
+      }
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "⚠️  1 critical question — a No or Don't Know answer escalates directly to High Risk."
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_q_0",
+      "label": {
+        "type": "plain_text",
+        "text": "1. Have performance expectations been clearly communicated in writing?"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "Verbal expectations alone are harder to defend. Look for emails, job descriptions, goal-setting documents, or meeting notes."
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "pac_q_answer_0",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Yes"
+            },
+            "value": "yes"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "No"
+            },
+            "value": "no"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Don't know"
+            },
+            "value": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_q_1",
+      "label": {
+        "type": "plain_text",
+        "text": "2. Has this issue been documented in prior conversations or reviews?"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "A first documented conversation is fine — just make sure it is documented. Verbal-only history creates risk."
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "pac_q_answer_1",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Yes"
+            },
+            "value": "yes"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "No"
+            },
+            "value": "no"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Don't know"
+            },
+            "value": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_q_2",
+      "label": {
+        "type": "plain_text",
+        "text": "3. Has the employee been given a clear opportunity to respond to concerns?"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "This means a real conversation, not just an email. The employee should be able to explain context."
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "pac_q_answer_2",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Yes"
+            },
+            "value": "yes"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "No"
+            },
+            "value": "no"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Don't know"
+            },
+            "value": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_q_3",
+      "label": {
+        "type": "plain_text",
+        "text": "4. Is the performance decline consistent and ongoing (not a single incident)?"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "A pattern over time is stronger than one bad week. Consider whether something changed."
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "pac_q_answer_3",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Yes"
+            },
+            "value": "yes"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "No"
+            },
+            "value": "no"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Don't know"
+            },
+            "value": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_q_4",
+      "label": {
+        "type": "plain_text",
+        "text": "5. Are there known leave, medical, or accommodation factors at play?  ⚠️"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "If yes, or if you're not sure, stop and consult HR before taking any action."
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "pac_q_answer_4",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Yes"
+            },
+            "value": "yes"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "No"
+            },
+            "value": "no"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Don't know"
+            },
+            "value": "unknown"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "text": "🟡 New PAC submission — Elevated Risk: Performance Decline",
+  "attachments": [
+    {
+      "color": "#f59e0b",
+      "blocks": [
+        {
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "🟡  PAC Submission — Elevated Risk"
+          }
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Scenario*\nPerformance Decline"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Risk Level*\n🟡  Elevated Risk"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Submitted by*\n<@U012ABCDEF>"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Submitted*\nJul 2, 06:01 PM ET"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Case ID*\n`pac_abc123`"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Status*\n📥  Submitted"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "actions",
+          "block_id": "pac_block_hr_actions",
+          "elements": [
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Acknowledge"
+              },
+              "style": "primary",
+              "action_id": "pac_hr_acknowledge",
+              "value": "pac_abc123"
+            },
+            {
+              "type": "overflow",
+              "action_id": "pac_hr_overflow",
+              "options": [
+                {
+                  "text": {
+                    "type": "plain_text",
+                    "text": "📋  Claim this case"
+                  },
+                  "value": "pac_hr_claim::pac_abc123"
+                },
+                {
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🔄  Reassign to another manager"
+                  },
+                  "value": "pac_hr_reassign::pac_abc123"
+                },
+                {
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🌐  Open in Web App"
+                  },
+                  "value": "pac_hr_open_web::pac_abc123"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

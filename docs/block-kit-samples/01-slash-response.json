@@ -1,0 +1,73 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*People Action Check*\nStructured HR risk guidance before you act on an employee situation."
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "Choose a scenario, answer 5 risk questions, and get your risk level with recommended next steps — in under 2 minutes."
+      }
+    },
+    {
+      "type": "actions",
+      "elements": [
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "Start New Check",
+            "emoji": true
+          },
+          "style": "primary",
+          "action_id": "pac_slash_open_intake"
+        },
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "My Cases",
+            "emoji": true
+          },
+          "action_id": "pac_slash_list_cases"
+        },
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "HR Cases",
+            "emoji": true
+          },
+          "action_id": "pac_slash_hr_cases"
+        },
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "Export",
+            "emoji": true
+          },
+          "action_id": "pac_slash_export_cases"
+        },
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "Open Web App",
+            "emoji": true
+          },
+          "action_id": "pac_result_open_web",
+          "value": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "type": "home",
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*People Action Check*\nStructured HR risk guidance before you act on an employee situation.\n_Answer 5 questions · Get your risk level · Know your next steps_"
+      },
+      "accessory": {
+        "type": "button",
+        "text": {
+          "type": "plain_text",
+          "text": "Start New Check",
+          "emoji": true
+        },
+        "style": "primary",
+        "action_id": "pac_slash_open_intake"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "Recent Checks"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "🟡  *Performance Decline*  ·  J.D.\n📥  Submitted  ·  Jul 2  ·  `pac_abc123`"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "🟢  *Attendance Issue*  ·  _Self-check_\n✅  Closed  ·  Jul 1  ·  `pac_def456`"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Scenarios covered*"
+      }
+    },
+    {
+      "type": "section",
+      "fields": [
+        {
+          "type": "mrkdwn",
+          "text": "🟢  Performance Decline\n🟢  Attendance Issue\n🟢  Interpersonal Conflict\n🟢  Policy Violation\n🟢  Leave of Absence"
+        },
+        {
+          "type": "mrkdwn",
+          "text": "🔴  Termination Consideration\n🔴  Accommodation Request\n🔴  Harassment / Discrimination\n🔴  Retaliation Concern\n🔴  Reduction in Force"
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*How it works*\n1.  Run `/pac` in any channel\n2.  Select your scenario and answer 5 risk questions\n3.  Get your risk level (Low / Elevated / High) with recommended next steps\n4.  Notify HR directly from Slack if needed\n5.  HR reviews, responds, and updates the case — all in Slack\n6.  Full case history, audit log, and documents available in the web app"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "People Action Check  ·  General guidance only — not legal advice.  ·  © 2026 Melissa A. Weiss"
+        }
+      ]
+    }
+  ]
+}

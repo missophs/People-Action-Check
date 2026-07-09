@@ -130,7 +130,6 @@ async function findCaseById(caseId) {
 
 async function listCasesForManager(managerId) {
   const formula = encodeURIComponent(`{Manager Slack ID}="${managerId}"`);
-  const sort = encodeURIComponent(JSON.stringify([{ field: 'Created At', direction: 'desc' }]));
   const data = await airtableRequest(`?filterByFormula=${formula}&sort%5B0%5D%5Bfield%5D=Created+At&sort%5B0%5D%5Bdirection%5D=desc`);
   return (data.records || []).map(r => fromFields(r.fields, r.id));
 }

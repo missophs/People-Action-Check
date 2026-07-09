@@ -1,4 +1,4 @@
-const { caseStore } = require("./lib/blob-store");
+const dataStore = require("./lib/data-store");
 
 // PAC_ADMIN_TOKEN: required env var. Guards all write (POST/DELETE) endpoints and list-all GET.
 // Missing → 503 (misconfiguration). Wrong token → 401.
@@ -22,42 +22,28 @@ function checkWriteAuth(event) {
   const auth = (event.headers["authorization"] || event.headers["Authorization"] || "").replace("Bearer ", "");
   return auth === ADMIN_TOKEN ? "ok" : "unauthorized";
 }
-function blobKey(managerId, caseId) {
-  return `case/${managerId}/${caseId}`;
-}
 
 exports.handler = async function (event) {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: HEADERS, body: "" };
 
-  const store = caseStore();
   const { managerId, caseId } = event.queryStringParameters || {};
 
   try {
     if (event.httpMethod === "GET") {
       if (managerId && caseId) {
-        const raw = await store.get(blobKey(managerId, caseId));
-        if (raw === null) return fail(404, "Not found");
-        return ok({ case: JSON.parse(raw) });
+        const rec = await dataStore.getCase(managerId, caseId);
+        if (!rec) return fail(404, "Not found");
+        return ok({ case: rec });
       }
       if (managerId) {
-        const { blobs } = await store.list({ prefix: `case/${managerId}/` });
-        const cases = (
-          await Promise.all(blobs.map((b) => store.get(b.key)))
-        )
-          .filter(Boolean)
-          .map((raw) => JSON.parse(raw));
+        const cases = await dataStore.listCasesForManager(managerId);
         return ok({ cases });
       }
       // list all — admin only
       const authResult = checkWriteAuth(event);
       if (authResult === "misconfigured") return fail(503, "PAC_ADMIN_TOKEN not configured");
       if (authResult === "unauthorized") return fail(401, "Unauthorized");
-      const { blobs } = await store.list({ prefix: "case/" });
-      const cases = (
-        await Promise.all(blobs.map((b) => store.get(b.key)))
-      )
-        .filter(Boolean)
-        .map((raw) => JSON.parse(raw));
+      const cases = await dataStore.listAllCases();
       return ok({ cases });
     }
 
@@ -74,9 +60,8 @@ exports.handler = async function (event) {
       if (!caseRecord || !caseRecord.id || !caseRecord.managerId) {
         return fail(400, "case.id and case.managerId required");
       }
-      const key = blobKey(caseRecord.managerId, caseRecord.id);
-      await store.set(key, JSON.stringify(caseRecord));
-      return ok({ ok: true, key });
+      await dataStore.saveCase(caseRecord);
+      return ok({ ok: true });
     }
 
     if (event.httpMethod === "DELETE") {
@@ -84,7 +69,7 @@ exports.handler = async function (event) {
       if (authResult === "misconfigured") return fail(503, "PAC_ADMIN_TOKEN not configured");
       if (authResult === "unauthorized") return fail(401, "Unauthorized");
       if (!managerId || !caseId) return fail(400, "managerId and caseId required");
-      await store.delete(blobKey(managerId, caseId));
+      await dataStore.deleteCase(managerId, caseId);
       return ok({ ok: true });
     }
 

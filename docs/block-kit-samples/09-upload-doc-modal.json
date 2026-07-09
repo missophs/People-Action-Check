@@ -1,0 +1,54 @@
+{
+  "type": "modal",
+  "callback_id": "pac_modal_upload_doc",
+  "title": {
+    "type": "plain_text",
+    "text": "Upload Documentation"
+  },
+  "submit": {
+    "type": "plain_text",
+    "text": "Attach to Case"
+  },
+  "close": {
+    "type": "plain_text",
+    "text": "Cancel"
+  },
+  "private_metadata": "{\"caseId\":\"pac_abc123\"}",
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Attach files to case `pac_abc123`*\nPIPs, write-ups, disciplinary records, or any supporting documentation. HR will be able to see these files."
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "input",
+      "block_id": "pac_block_doc_upload",
+      "label": {
+        "type": "plain_text",
+        "text": "Files"
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "PDF, DOCX, PNG, JPG — up to 5 files."
+      },
+      "element": {
+        "type": "file_input",
+        "action_id": "pac_doc_files",
+        "filetypes": [
+          "pdf",
+          "doc",
+          "docx",
+          "png",
+          "jpg",
+          "jpeg"
+        ],
+        "max_files": 5
+      }
+    }
+  ]
+}

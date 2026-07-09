@@ -1,0 +1,167 @@
+{
+  "type": "modal",
+  "callback_id": "pac_modal_export_cases",
+  "private_metadata": "hr",
+  "title": {
+    "type": "plain_text",
+    "text": "Export Cases"
+  },
+  "submit": {
+    "type": "plain_text",
+    "text": "Export"
+  },
+  "close": {
+    "type": "plain_text",
+    "text": "Cancel"
+  },
+  "blocks": [
+    {
+      "type": "input",
+      "block_id": "export_format",
+      "label": {
+        "type": "plain_text",
+        "text": "Format"
+      },
+      "element": {
+        "type": "static_select",
+        "action_id": "format",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "Choose a format"
+        },
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "CSV  —  Excel, Google Sheets, Numbers"
+            },
+            "value": "csv"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Word doc (.doc)  —  opens in Word"
+            },
+            "value": "word"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "TSV  —  tab-separated (Excel native)"
+            },
+            "value": "tsv"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "JSON  —  raw data"
+            },
+            "value": "json"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "export_filter",
+      "label": {
+        "type": "plain_text",
+        "text": "Cases to include"
+      },
+      "element": {
+        "type": "static_select",
+        "action_id": "filter",
+        "initial_option": {
+          "text": {
+            "type": "plain_text",
+            "text": "All cases"
+          },
+          "value": "all"
+        },
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "All cases"
+            },
+            "value": "all"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "HR cases only (notified)"
+            },
+            "value": "hr"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Open cases only"
+            },
+            "value": "open"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "export_delivery",
+      "label": {
+        "type": "plain_text",
+        "text": "Delivery"
+      },
+      "element": {
+        "type": "static_select",
+        "action_id": "delivery",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "How to receive the file"
+        },
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Send me a download link"
+            },
+            "value": "link"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Email to me"
+            },
+            "value": "email_self"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Email to a specific address"
+            },
+            "value": "email_custom"
+          }
+        ]
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "export_email",
+      "label": {
+        "type": "plain_text",
+        "text": "Email address (if emailing)"
+      },
+      "optional": true,
+      "hint": {
+        "type": "plain_text",
+        "text": "For SharePoint: use your document library email address."
+      },
+      "element": {
+        "type": "plain_text_input",
+        "action_id": "email",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "hr@company.com or sharepoint-library@company.sharepoint.com"
+        }
+      }
+    }
+  ]
+}

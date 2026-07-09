@@ -133,7 +133,9 @@ async function notifyManagerResult({ managerEmail, scenario, level, caseId, refN
       <tr><td style="color:#64748b;font-size:13px;padding:4px 12px 4px 0">Mode</td>
           <td style="font-size:14px">${selfCheck ? '🔒 Self-check — HR not notified' : 'Standard'}</td></tr>
     </table>
-    ${isHigh && !selfCheck ? `<p style="background:#fef2f2;border-left:3px solid #f43f5e;padding:10px 14px;border-radius:4px;font-size:13px;margin:0">
+    ${scenario === 'Reduction in Force' && !selfCheck ? `<p style="background:#fef2f2;border-left:3px solid #f43f5e;padding:10px 14px;border-radius:4px;font-size:13px;margin:0">
+      <strong>Connect with HR</strong> — A Reduction in Force requires HR involvement before any action is taken. Do not proceed without speaking to HR first.
+    </p>` : isHigh && !selfCheck ? `<p style="background:#fef2f2;border-left:3px solid #f43f5e;padding:10px 14px;border-radius:4px;font-size:13px;margin:0">
       High Risk result — consider notifying HR if you have not already done so.
     </p>` : ''}
   `);

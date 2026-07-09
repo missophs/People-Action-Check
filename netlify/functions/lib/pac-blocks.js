@@ -286,7 +286,9 @@ function resultDmMessage({ scenario, scenarios = [scenario], level, caseId, hrNo
     ? '🟡  ELEVATED RISK — Consult HR before you proceed.'
     : '🟢  LOW RISK — Routine management action — proceed carefully.';
 
-  const guidanceDetail = level === 'risk'
+  const guidanceDetail = scenario === 'Reduction in Force'
+    ? 'Do not take any action until you have spoken with HR. RIFs require legal review, documentation, and coordinated communication.'
+    : level === 'risk'
     ? 'Do not schedule meetings, issue warnings, or communicate with the employee until HR has reviewed this case.'
     : level === 'warn'
     ? 'Address the documentation gaps below and confirm your next move with HR first.'
@@ -565,7 +567,7 @@ function hrTriageMessage({ scenario, scenarios = [scenario], level, caseId, mana
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.permalink}|${a.name}>`).join('\n')}`,
+        text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.url}|${a.name}>`).join('\n')}`,
       },
     });
     blocks.push({ type: 'divider' });
@@ -1474,7 +1476,7 @@ function caseFullExportMessage(rec, questions) {
   // Uploaded documents
   if (attachments.length) {
     blocks.push({ type: 'divider' });
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.permalink}|${a.name}>`).join('\n')}` } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*UPLOADED DOCUMENTS*\n${attachments.map(a => `📎  <${a.url}|${a.name}>`).join('\n')}` } });
   } else {
     blocks.push({ type: 'divider' });
     blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: '📎  No documents uploaded for this case.' }] });

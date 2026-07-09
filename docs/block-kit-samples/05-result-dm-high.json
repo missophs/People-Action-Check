@@ -1,0 +1,97 @@
+{
+  "text": "People Action Check — High Risk: Termination Consideration",
+  "attachments": [
+    {
+      "color": "#f43f5e",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*People Action Check  ·  Result*"
+          }
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Scenario*\nTermination Consideration"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Risk Level*\n🔴  High Risk"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Case ID*\n`pac_xyz789`"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Status*\n⏳  Pending notification"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "🔴  *High Risk — stop and get HR clearance before taking any action.*\nDo not schedule meetings, issue warnings, or communicate anything to the employee until HR has reviewed this situation."
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Recommended next steps:*\n•  Stop. Do not schedule, communicate, or hint at the termination until legal review is complete.\n•  Employment counsel must review the full documentation, timeline, and legal exposure before you proceed.\n•  Any adverse action right now carries significant legal risk. Wait for clearance."
+          }
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "actions",
+          "elements": [
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Notify HR",
+                "emoji": true
+              },
+              "style": "danger",
+              "action_id": "pac_result_notify_hr",
+              "value": "pac_xyz789"
+            },
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Upload Documentation",
+                "emoji": true
+              },
+              "action_id": "pac_result_upload_doc",
+              "value": "pac_xyz789"
+            },
+            {
+              "type": "button",
+              "text": {
+                "type": "plain_text",
+                "text": "Open Web App",
+                "emoji": true
+              },
+              "action_id": "pac_result_open_web",
+              "value": "pac_xyz789"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
