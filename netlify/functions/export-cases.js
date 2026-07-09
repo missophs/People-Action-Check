@@ -1,10 +1,16 @@
 // Export cases as CSV, TSV, Word doc, JSON, or email to HR.
-// GET  /api/export-cases?format=csv|tsv|word|json&filter=hr|open&token=PAC_ADMIN_TOKEN
-// POST /api/export-cases?format=csv|tsv|word&filter=hr|open&token=PAC_ADMIN_TOKEN
+//
+// Auth (in order of precedence):
+//   1. Authorization: Bearer <PAC_ADMIN_TOKEN>  (preferred — for direct API calls)
+//   2. ?sig=<signed-token>                       (for Slack-generated short-lived links)
+//   3. ?token=<PAC_ADMIN_TOKEN>                  (DEPRECATED — grace period only; remove after rotation)
+//
+// GET  /api/export-cases?format=csv|tsv|word|json&filter=hr|open&sig=<token>
+// POST /api/export-cases?format=csv|tsv|word&filter=hr|open&sig=<token>
 //      body: { email: "hr@company.com", subject: "optional subject" }
-//      → generates report and emails it via Brevo; also works for SharePoint library emails
 
-const dataStore = require('./lib/data-store');
+const dataStore    = require('./lib/data-store');
+const exportToken  = require('./lib/export-token');
 
 const RISK_LABELS  = { good: 'Low Risk', warn: 'Elevated Risk', risk: 'High Risk' };
 const RISK_COLORS  = { good: '#34d399', warn: '#f59e0b', risk: '#f43f5e' };
@@ -158,11 +164,27 @@ async function sendViaBrevo({ toEmail, subject, content, filename, contentType }
 }
 
 exports.handler = async function (event) {
-  const token  = event.queryStringParameters?.token;
   const format = (event.queryStringParameters?.format || 'csv').toLowerCase();
   const filter = event.queryStringParameters?.filter;
 
-  if (token !== process.env.PAC_ADMIN_TOKEN) {
+  // Auth: Bearer header (preferred) → signed ?sig= token → deprecated ?token= param
+  const adminToken = process.env.PAC_ADMIN_TOKEN;
+  const authHeader = event.headers?.['authorization'] || event.headers?.['Authorization'] || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const sigParam = event.queryStringParameters?.sig;
+  const rawToken = event.queryStringParameters?.token; // deprecated
+
+  let authed = false;
+  if (bearerToken && adminToken && bearerToken === adminToken) {
+    authed = true;
+  } else if (sigParam) {
+    try { exportToken.verify(sigParam); authed = true; } catch { authed = false; }
+  } else if (rawToken && adminToken && rawToken === adminToken) {
+    // Deprecated path — grace period only. Remove after PAC_ADMIN_TOKEN is rotated.
+    authed = true;
+  }
+
+  if (!authed) {
     return { statusCode: 401, body: 'Unauthorized' };
   }
 

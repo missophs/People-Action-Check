@@ -45,6 +45,7 @@ const {
 const { hrConfigStore } = require('./lib/blob-store');
 const emailNotify = require('./lib/email-notify');
 const { ACTION_IDS: A, CALLBACK_IDS: C, BLOCK_IDS: B, AUDIT_EVENTS: E } = require('./lib/governance');
+const exportToken = require('./lib/export-token');
 
 async function getHrEmail() {
   const store = hrConfigStore();
@@ -363,7 +364,7 @@ async function handleBlockActions(payload) {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `${risk.emoji}  *${c.scenario}*  ·  <@${c.managerId}>\n${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`${docNote}`,
+              text: `${risk.emoji}  *${c.scenario}*  ·  <@${c.managerId}>\n${stateLabel(c.state)}  ·  ${date}${docNote}`,
             },
             accessory: {
               type: 'overflow',
@@ -383,17 +384,17 @@ async function handleBlockActions(payload) {
   }
 
   if (actionId === A.HR_CASE_ROW_OVERFLOW) {
-    const [action, value] = (action?.selected_option?.value || '').split('::');
-    if (action === A.CASE_ROW_FILTER_MGR && value) {
+    const [overflowAction, overflowValue] = (action?.selected_option?.value || '').split('::');
+    if (overflowAction === A.CASE_ROW_FILTER_MGR && overflowValue) {
       const all = await listAllCases();
       const mgrCases = all
-        .filter(c => c.managerId === value && c.hrNotified)
+        .filter(c => c.managerId === overflowValue && c.hrNotified)
         .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-      const label = mgrCases.length ? `Cases from <@${value}>` : `No HR cases from <@${value}>`;
+      const label = mgrCases.length ? `Cases from <@${overflowValue}>` : `No HR cases from <@${overflowValue}>`;
       const rows = mgrCases.map(c => {
         const risk = r(c.risk || 'good');
         const date = new Date(c.updatedAt || c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        return { type: 'section', text: { type: 'mrkdwn', text: `${risk.emoji}  *${c.scenario}*  ·  ${stateLabel(c.state)}  ·  ${date}  ·  \`${c.id}\`` } };
+        return { type: 'section', text: { type: 'mrkdwn', text: `${risk.emoji}  *${c.scenario}*  ·  ${stateLabel(c.state)}  ·  ${date}` } };
       });
       await postMessage(userId, [
         { type: 'header', text: { type: 'plain_text', text: label } },
@@ -401,13 +402,13 @@ async function handleBlockActions(payload) {
         ...rows,
       ]);
     }
-    if (action === 'open_case' && value) {
-      const rec = await findCaseById(value);
+    if (overflowAction === 'open_case' && overflowValue) {
+      const rec = await findCaseById(overflowValue);
       if (rec?.hrChannelId && rec?.hrChannelTs) {
         const link = `https://slack.com/archives/${rec.hrChannelId}/p${rec.hrChannelTs.replace('.', '')}`;
         await postEphemeral(channelId || userId, userId, [{
           type: 'section',
-          text: { type: 'mrkdwn', text: `Open the HR thread for case \`${value}\`:\n${link}` },
+          text: { type: 'mrkdwn', text: `Open the HR thread:\n${link}` },
         }]);
       }
     }
@@ -1098,9 +1099,10 @@ async function handleViewSubmission(payload) {
       return ack('');
     }
 
-    const token  = process.env.PAC_ADMIN_TOKEN;
     const filterParam = filter === 'all' ? '' : `&filter=${filter}`;
-    const base   = `${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`;
+    // Sign a short-lived token (5 min) — PAC_ADMIN_TOKEN never appears in Slack-visible URLs
+    const sig  = exportToken.sign({ format, filter: filter || 'all' }, 300);
+    const base = `${WEB_APP_URL}/api/export-cases?sig=${sig}&format=${format}${filterParam}`;
 
     const FORMAT_LABELS = {
       csv: 'CSV (Excel / Google Sheets)',
@@ -1112,7 +1114,7 @@ async function handleViewSubmission(payload) {
     if (delivery === 'link') {
       await postMessage(userId, [{
         type: 'section',
-        text: { type: 'mrkdwn', text: `*Your export is ready*\n<${base}|Download ${FORMAT_LABELS[format]}>\n\nFor SharePoint, you can also email this to your document library address.` },
+        text: { type: 'mrkdwn', text: `*Your export is ready*\n<${base}|Download ${FORMAT_LABELS[format]}>\n\nLink expires in 5 minutes. For SharePoint, you can also email this to your document library address.` },
       }]);
       return ack('');
     }
@@ -1128,7 +1130,7 @@ async function handleViewSubmission(payload) {
     }
 
     try {
-      const res = await fetch(`${WEB_APP_URL}/api/export-cases?token=${token}&format=${format}${filterParam}`, {
+      const res = await fetch(`${WEB_APP_URL}/api/export-cases?sig=${sig}&format=${format}${filterParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: toEmail }),
