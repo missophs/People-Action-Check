@@ -1175,6 +1175,12 @@ async function handleViewSubmission(payload) {
 // ── Main handler ──────────────────────────────────────────────────────────
 
 exports.handler = async function (event) {
+  // Startup diagnostic — visible in Netlify function logs
+  const _hasSigningSecret = !!(process.env.PAC_SLACK_SIGNING_SECRET || process.env.PAC_CONSULTING_SIGNING_SECRET);
+  const _hasBotToken = !!process.env.PAC_SLACK_BOT_TOKEN;
+  const _hasAdminToken = !!process.env.PAC_ADMIN_TOKEN;
+  console.log(`[pac-slack] invoked method=${event.httpMethod} signingSecret=${_hasSigningSecret} botToken=${_hasBotToken} adminToken=${_hasAdminToken}`);
+
   activeToken = null;
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' };
@@ -1183,11 +1189,11 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  console.log('method:', event.httpMethod);
   if (!verifySignature(event)) {
-    console.error('Slack signature verification failed');
+    console.error('[pac-slack] signature verification FAILED — check PAC_SLACK_SIGNING_SECRET matches Slack app Basic Information page');
     return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
+  console.log('[pac-slack] signature verified OK');
 
   // Capture token set by verifySignature synchronously, then clear module mutable.
   // _tokenStore.run() scopes the captured token to this invocation's async context,
