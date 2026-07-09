@@ -1189,6 +1189,14 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
+  // Handle Slack's url_verification challenge BEFORE signature check.
+  // Slack sends this unauthenticated ping when saving a URL in the app config.
+  const _earlyParsed = parseBody(event);
+  if (_earlyParsed.type === 'url_verification') {
+    console.log('[pac-slack] url_verification challenge — responding');
+    return ack(JSON.stringify({ challenge: _earlyParsed.challenge }));
+  }
+
   if (!verifySignature(event)) {
     console.error('[pac-slack] signature verification FAILED — check PAC_SLACK_SIGNING_SECRET matches Slack app Basic Information page');
     return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
@@ -1205,7 +1213,7 @@ exports.handler = async function (event) {
     const parsed = parseBody(event);
     console.log('parsed command:', parsed.command, 'type:', parsed.type);
 
-    // URL verification (Events API)
+    // URL verification already handled above — this path won't be reached
     if (parsed.type === 'url_verification') {
       return ack(JSON.stringify({ challenge: parsed.challenge }));
     }
