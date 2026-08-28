@@ -83,6 +83,24 @@ Independent of the blank-page bug, the webhook-notify feature (`/api/notify`, us
 
 **Verified:** `curl https://hractioncheck.netlify.app/api/get-hr-email` → `{"hrEmail":"<redacted>"}`. Save/load round-trip tested via curl before confirming through the actual UI.
 
+## 2026-08-28 incident: policy uploads stored raw file bytes instead of text, and Netlify was deploying the wrong branch
+
+**Symptom:** Uploading a PDF policy document (e.g. the employee handbook) under Company Policies stored raw, unparsed binary content (`%PDF-1.6 1844 0 obj <</Linearized...`) instead of extracted text. Fixes pushed to fix this appeared not to work at all, even after repeated "Trigger deploy" clicks in Netlify.
+
+**Root cause #1 — code bug in `readFile()` (`src/web/App.jsx`, mirrored in `hr-action-check-final-5.26.html`):** PDF detection only matched `file.type === "application/pdf"` or a `.pdf` filename. Any PDF where the browser didn't set that MIME type, or where the filename didn't match, fell through to `reader.readAsText(file)` and stored the raw binary. There was also no handling at all for `.doc`/`.docx` uploads, despite the UI advertising Word support — Word files silently stored garbage the same way.
+
+**Fix #1:** Added `isWordFile`/`isPdfFile`/`isTextish` helpers, a byte-sniffing fallback (checks for a `%PDF-` header) for files with ambiguous name/MIME type, and an explicit "can't be read automatically yet" message for Word docs instead of storing garbage. Verified via Playwright against a locally vendored copy of the app (PDF text now extracts correctly; `.docx` shows the explicit message instead of raw bytes); existing vitest suite still passes.
+
+**Root cause #2 — Netlify was building from a stale branch:** The live site (pachr.netlify.app) deploys from `pac-enterprise-slack-build`, not `webhooks`. Earlier fixes were pushed/merged into `webhooks`, which auto-deploys to a different, unused Netlify site — so every push appeared to do nothing on the branch actually serving production, which was stuck at commit `b9bf299` (2026-07-10). Confirmed from the user's own Netlify Deploys-tab screenshot ("Production: pac-enterp... @b9bf299").
+
+**Fix #2:** Copied the fixed `index.html` and `src/web/App.jsx` from commit `7a17bf2` onto a new branch off `origin/pac-enterprise-slack-build`, opened and merged PR #5 (merge commit `a7224071f250f8ccb3587f5651a70085730b5257`) directly into `pac-enterprise-slack-build` so Netlify's auto-deploy picks it up. `netlify/functions/pac-slack.js` was deliberately left untouched — it has diverged independently between `pac-enterprise-slack-build` and `webhooks`/this branch into two different Slack-integration implementations; reconciling that is unrelated to this bug and was out of scope.
+
+**Also added (explicit user request, same investigation):** A "Remove" affordance reachable directly from the Company Policies → View Policies tab (`PolicyLibrary` in `src/web/App.jsx`) via an inline "Unlock to remove or edit" PIN prompt, so removing a bad document no longer requires switching to the Upload/Paste tab first.
+
+**Lesson:** confirm which branch a Netlify site actually builds from (Site → Deploys, not assumptions from git history) before trusting that a merged fix is live. This repo currently has three branches with real, divergent history (`webhooks`, `pac-enterprise-slack-build`, `main`) — only `pac-enterprise-slack-build` is production for pachr.netlify.app as of this incident.
+
+**Not yet done:** Reconcile `netlify/functions/pac-slack.js` between `pac-enterprise-slack-build` and `webhooks`/`main` — two different Slack-integration implementations currently coexist across branches.
+
 ## Verifying after future changes
 
 1. `curl -sI https://hractioncheck.netlify.app/` — check the `etag` changed after a push, confirming a new deploy went out.
