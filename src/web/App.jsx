@@ -131,16 +131,35 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [viewingSub, setViewingSub]       = useState(null);
   const fileRef = useRef(null);
 
-  const readFile = (file) => new Promise((resolve) => {
+  const readPdf = (file) => new Promise((resolve) => {
     const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
+        let text = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(item => item.str).join(" ") + "\n\n";
+        }
+        text = text.trim();
+        resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
+      } catch (err) {
+        resolve({ name:file.name, text:"[PDF could not be parsed — use Paste Text instead.]", size:file.size });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  const readFile = (file) => new Promise((resolve) => {
     if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
-      reader.onload = (e) => {
-        const matches = (e.target.result || "").match(/[^\x00-\x1F\x7F-\xFF]{4,}/g) || [];
-        const extracted = matches.filter(s=>s.trim().length>3).join(" ").substring(0,50000);
-        resolve({ name:file.name, text:extracted||"[PDF uploaded. Text extraction is limited — for best results, use Paste Text instead.]", size:file.size });
-      };
-      reader.readAsBinaryString(file);
+      if (typeof pdfjsLib === "undefined") {
+        resolve({ name:file.name, text:"[PDF reader failed to load — use Paste Text instead.]", size:file.size });
+        return;
+      }
+      resolve(readPdf(file));
     } else {
+      const reader = new FileReader();
       reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
       reader.readAsText(file);
     }
@@ -315,7 +334,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
                 </div>
                 <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.78rem", color:"var(--pac-accent-text-85)", lineHeight:1.5, marginBottom:16 }}>
-                  PDF tip: Text extraction from PDFs is limited. For better results, copy the text and use the Paste Text tab.
+                  PDF tip: Scanned/image-only PDFs can't be read automatically — for those, copy the text and use the Paste Text tab instead.
                 </div>
                 {/* Change PIN + Reset */}
                 <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
