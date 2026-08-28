@@ -108,9 +108,8 @@ function PinGate({ onUnlock, mode }) {
 }
 
 // ── Policy Library Modal ──────────────────────────────────────────────────
-function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook }) {
+function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook, unlocked, setUnlocked }) {
   const [tab, setTab]                     = useState("view");
-  const [unlocked, setUnlocked]           = useState(false);
   const [pasteText, setPasteText]         = useState("");
   const [pasteName, setPasteName]         = useState("");
   const [pasteCategory, setPasteCat]      = useState("handbook");
@@ -145,8 +144,13 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
         text = text.trim();
         resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
       } catch (err) {
+        console.error("PDF parse failed for", file.name, err);
         resolve({ name:file.name, text:"[PDF could not be parsed — use Paste Text instead.]", size:file.size });
       }
+    };
+    reader.onerror = () => {
+      console.error("FileReader failed to read", file.name, reader.error);
+      resolve({ name:file.name, text:"[Could not read file — use Paste Text instead.]", size:file.size });
     };
     reader.readAsArrayBuffer(file);
   });
@@ -161,6 +165,10 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     } else {
       const reader = new FileReader();
       reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
+      reader.onerror = () => {
+        console.error("FileReader failed to read", file.name, reader.error);
+        resolve({ name:file.name, text:"", size:file.size });
+      };
       reader.readAsText(file);
     }
   });
@@ -185,7 +193,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
 
   const addPaste = () => {
     if (!pasteText.trim()) return;
-    const doc = { id:Date.now(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
+    const doc = { id:Date.now()+Math.random(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
     const u=[...policies,doc]; setPolicies(u); savePolicies(u); setPasteText(""); setPasteName(""); setTab("view");
   };
 
@@ -568,6 +576,7 @@ function App() {
   const [showResumeBanner, setShowResume]   = useState(false);
   const [policies, setPolicies]       = useState([]);
   const [showPolicyLib, setShowPolicyLib]   = useState(false);
+  const [policyLibUnlocked, setPolicyLibUnlocked] = useState(false);
   const [emailAddr, setEmailAddr]           = useState("");
   const [emailStatus, setEmailStatus]       = useState("idle");
   const [checkHistory, setCheckHistory]     = useState([]);
@@ -811,7 +820,7 @@ function App() {
 
   return (
     <div style={s.wrap}>
-      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
 
       <div style={{ maxWidth:"var(--pac-content-width)", margin:"0 auto" }} role="main" aria-label="People Action Check">
 
