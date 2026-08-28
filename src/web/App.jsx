@@ -82,7 +82,7 @@ function PinGate({ onUnlock, mode }) {
       <div style={s.title}>HR Access Only</div>
       <div style={s.sub}>Enter your admin PIN to manage company policies. You will be required to set a new PIN if you haven't already.</div>
       <div key={shakeKey} className={shakeKey ? "shake" : ""}>
-        <input ref={inputRef} style={s.input} type="password" placeholder="Enter PIN" aria-label="Enter PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleUnlock()} maxLength={20} />
+        <input ref={inputRef} style={s.input} type="password" placeholder="Enter PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleUnlock()} maxLength={20} />
       </div>
       <div style={s.err}>{error}</div>
       <button style={s.btn(true)} onClick={handleUnlock}>Unlock</button>
@@ -95,10 +95,10 @@ function PinGate({ onUnlock, mode }) {
       <div style={s.lockIcon}><Icon name="key" size={32} color="var(--pac-accent)" /></div>
       <div style={s.title}>Change HR PIN</div>
       <div style={s.sub}>Enter your current PIN, then set a new one.</div>
-      <input style={s.input} type="password" placeholder="Current PIN" aria-label="Current PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} maxLength={20} />
-      <input style={s.input} type="password" placeholder="New PIN (min 4 characters)" aria-label="New PIN, minimum 4 characters" value={newPin} onChange={e=>{ setNewPin(e.target.value); setError(""); }} maxLength={20} />
+      <input style={s.input} type="password" placeholder="Current PIN" value={pin} onChange={e=>{ setPin(e.target.value); setError(""); }} maxLength={20} />
+      <input style={s.input} type="password" placeholder="New PIN (min 4 characters)" value={newPin} onChange={e=>{ setNewPin(e.target.value); setError(""); }} maxLength={20} />
       <div key={shakeKey} className={shakeKey ? "shake" : ""}>
-        <input style={s.input} type="password" placeholder="Confirm new PIN" aria-label="Confirm new PIN" value={confirmPin} onChange={e=>{ setConfirm(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleChange()} maxLength={20} />
+        <input style={s.input} type="password" placeholder="Confirm new PIN" value={confirmPin} onChange={e=>{ setConfirm(e.target.value); setError(""); }} onKeyDown={e=>e.key==="Enter"&&handleChange()} maxLength={20} />
       </div>
       <div style={s.err}>{error}</div>
       <button style={s.btn(true)} onClick={handleChange}>Save new PIN</button>
@@ -108,9 +108,8 @@ function PinGate({ onUnlock, mode }) {
 }
 
 // ── Policy Library Modal ──────────────────────────────────────────────────
-function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook }) {
+function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook, unlocked, setUnlocked }) {
   const [tab, setTab]                     = useState("view");
-  const [unlocked, setUnlocked]           = useState(false);
   const [pasteText, setPasteText]         = useState("");
   const [pasteName, setPasteName]         = useState("");
   const [pasteCategory, setPasteCat]      = useState("handbook");
@@ -118,6 +117,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [viewDoc, setViewDoc]             = useState(null);
   const [editingId, setEditingId]         = useState(null);
   const [showReset, setShowReset]         = useState(false);
+  const [unlockingInView, setUnlockingInView] = useState(false);
   const [hrEmailInput, setHrEmailInput]   = useState(hrEmail||"");
   const [hrEmailSaved, setHrEmailSaved]   = useState(false);
   const [hrEmailSaving, setHrEmailSaving] = useState(false);
@@ -131,19 +131,78 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [viewingSub, setViewingSub]       = useState(null);
   const fileRef = useRef(null);
 
-  const readFile = (file) => new Promise((resolve) => {
+  const readPdf = (file) => new Promise((resolve) => {
     const reader = new FileReader();
-    if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
-      reader.onload = (e) => {
-        const matches = (e.target.result || "").match(/[^\x00-\x1F\x7F-\xFF]{4,}/g) || [];
-        const extracted = matches.filter(s=>s.trim().length>3).join(" ").substring(0,50000);
-        resolve({ name:file.name, text:extracted||"[PDF uploaded. Text extraction is limited — for best results, use Paste Text instead.]", size:file.size });
-      };
-      reader.readAsBinaryString(file);
-    } else {
-      reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
-      reader.readAsText(file);
+    reader.onload = async (e) => {
+      try {
+        const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
+        let text = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(item => item.str).join(" ") + "\n\n";
+        }
+        text = text.trim();
+        resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
+      } catch (err) {
+        console.error("PDF parse failed for", file.name, err);
+        resolve({ name:file.name, text:"[PDF could not be parsed — use Paste Text instead.]", size:file.size });
+      }
+    };
+    reader.onerror = () => {
+      console.error("FileReader failed to read", file.name, reader.error);
+      resolve({ name:file.name, text:"[Could not read file — use Paste Text instead.]", size:file.size });
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  const isWordFile = (file) => /\.docx?$/i.test(file.name) || /wordprocessingml|msword/.test(file.type);
+  const isPdfFile  = (file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  const isTextish  = (file) => /\.(txt|md)$/i.test(file.name) || /^text\//.test(file.type);
+
+  const readFile = (file) => new Promise((resolve) => {
+    if (isWordFile(file) && !isPdfFile(file)) {
+      resolve({ name:file.name, text:"[.doc/.docx files can't be read automatically yet — copy the text and use Paste Text instead.]", size:file.size });
+      return;
     }
+    if (isPdfFile(file)) {
+      if (typeof pdfjsLib === "undefined") {
+        resolve({ name:file.name, text:"[PDF reader failed to load — use Paste Text instead.]", size:file.size });
+        return;
+      }
+      resolve(readPdf(file));
+      return;
+    }
+    if (isTextish(file)) {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
+      reader.onerror = () => {
+        console.error("FileReader failed to read", file.name, reader.error);
+        resolve({ name:file.name, text:"", size:file.size });
+      };
+      reader.readAsText(file);
+      return;
+    }
+    // Unrecognized name/MIME (e.g. a PDF dropped without a .pdf extension) — sniff the header bytes
+    // rather than assume plain text, so raw binary never lands in the stored policy text.
+    const sniffer = new FileReader();
+    sniffer.onload = (e) => {
+      const header = String.fromCharCode(...new Uint8Array(e.target.result.slice(0, 5)));
+      if (header === "%PDF-") {
+        if (typeof pdfjsLib === "undefined") {
+          resolve({ name:file.name, text:"[PDF reader failed to load — use Paste Text instead.]", size:file.size });
+        } else {
+          resolve(readPdf(file));
+        }
+      } else {
+        resolve({ name:file.name, text:new TextDecoder("utf-8").decode(e.target.result)||"", size:file.size });
+      }
+    };
+    sniffer.onerror = () => {
+      console.error("FileReader failed to read", file.name, sniffer.error);
+      resolve({ name:file.name, text:"", size:file.size });
+    };
+    sniffer.readAsArrayBuffer(file);
   });
 
   const handleFiles = async (files) => {
@@ -166,7 +225,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
 
   const addPaste = () => {
     if (!pasteText.trim()) return;
-    const doc = { id:Date.now(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
+    const doc = { id:Date.now()+Math.random(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
     const u=[...policies,doc]; setPolicies(u); savePolicies(u); setPasteText(""); setPasteName(""); setTab("view");
   };
 
@@ -252,8 +311,18 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                     {viewDoc.text}
                   </div>
                 </div>
+              ) : unlockingInView ? (
+                <div>
+                  <PinGate onUnlock={()=>{ setUnlocked(true); setUnlockingInView(false); }} />
+                  <button style={{ ...s.btn(false), width:"100%" }} onClick={()=>setUnlockingInView(false)}>Cancel</button>
+                </div>
               ) : (
                 <div>
+                  {!unlocked && (
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setUnlockingInView(true)}>Unlock to remove or edit</button>
+                    </div>
+                  )}
                   {currentScenario && relevantDocs.length>0 && relevantDocs.length<policies.length && (
                     <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.79rem", color:"var(--pac-good)", marginBottom:14 }}>
                       {relevantDocs.length} of {policies.length} documents are relevant to the current scenario.
@@ -275,7 +344,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                                 {POLICY_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
                               </select>
                             ) : (
-                              <span onClick={()=>unlocked&&setEditingId(doc.id)} role={unlocked?"button":undefined} tabIndex={unlocked?0:undefined} aria-label={unlocked?`Change category, currently ${cat?.label}`:undefined} onKeyDown={unlocked?(e=>(e.key==="Enter"||e.key===" ")&&(e.preventDefault(),setEditingId(doc.id))):undefined} style={{ fontSize:"0.69rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:5, cursor:unlocked?"pointer":"default", background:`${cat?.color}18`, color:cat?.color, border:`1px solid ${cat?.color}30` }}>{cat?.label}</span>
+                              <span onClick={()=>unlocked&&setEditingId(doc.id)} style={{ fontSize:"0.69rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:5, cursor:unlocked?"pointer":"default", background:`${cat?.color}18`, color:cat?.color, border:`1px solid ${cat?.color}30` }}>{cat?.label}</span>
                             )}
                             <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>{(doc.chars/1000).toFixed(1)}k chars · {doc.addedAt}</span>
                           </div>
@@ -312,10 +381,10 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   <div style={{ marginBottom:10, display:"flex", justifyContent:"center" }}><Icon name="folderOpen" size={40} color={dragActive?"var(--pac-accent)":"var(--pac-text-muted)"} /></div>
                   <div style={{ fontSize:"0.88rem", fontWeight:600, color:"var(--pac-text)", marginBottom:4 }}>Drop files here or click to browse</div>
                   <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)" }}>.txt, .pdf, .doc, .docx, .md — up to 5MB each</div>
-                  <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" aria-label="Upload policy documents" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
+                  <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
                 </div>
                 <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.78rem", color:"var(--pac-accent-text-85)", lineHeight:1.5, marginBottom:16 }}>
-                  PDF tip: Text extraction from PDFs is limited. For better results, copy the text and use the Paste Text tab.
+                  PDF tip: Scanned/image-only PDFs can't be read automatically — for those, copy the text and use the Paste Text tab instead.
                 </div>
                 {/* Change PIN + Reset */}
                 <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -334,7 +403,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:700 }}>HR Email Address</div>
                   <div style={{ fontSize:"0.77rem", color:"rgba(248,250,252,0.55)", lineHeight:1.5, marginBottom:8 }}>Employees can send check results directly to this address using the "Send to HR" button on result screens.</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" aria-label="HR email address" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); setHrEmailError(false); }} />
+                    <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} type="email" placeholder="hr@yourcompany.com" value={hrEmailInput} onChange={e=>{ setHrEmailInput(e.target.value); setHrEmailSaved(false); setHrEmailError(false); }} />
                     <button style={{ ...s.btn(true), opacity:hrEmailSaving?0.6:1 }} disabled={hrEmailSaving} onClick={async()=>{
                       setHrEmailSaving(true); setHrEmailError(false);
                       try { await onSaveHrEmail(hrEmailInput.trim()); setHrEmailSaved(true); }
@@ -355,7 +424,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                       Incoming Webhook URL
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." aria-label="Slack webhook URL" value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); }} />
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); }} />
                       <button style={s.btn(true)} onClick={()=>{ onSaveSlackWebhook(slackInput.trim()); setSlackSaved(true); }}>Save</button>
                     </div>
                     {slackSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
@@ -366,7 +435,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                       Incoming Webhook URL
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." aria-label="Teams webhook URL" value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); }} />
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); }} />
                       <button style={s.btn(true)} onClick={()=>{ onSaveTeamsWebhook(teamsInput.trim()); setTeamsSaved(true); }}>Save</button>
                     </div>
                     {teamsSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
@@ -385,7 +454,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                 </div>
                 <div style={{ marginBottom:10 }}>
                   <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Document name</div>
-                  <input style={s.input} placeholder="e.g. Attendance Policy, Handbook Section 4..." aria-label="Document name" value={pasteName} onChange={e=>setPasteName(e.target.value)} />
+                  <input style={s.input} placeholder="e.g. Attendance Policy, Handbook Section 4..." value={pasteName} onChange={e=>setPasteName(e.target.value)} />
                 </div>
                 <div style={{ marginBottom:10 }}>
                   <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Category</div>
@@ -478,7 +547,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                     </div>
                     {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"};
                       return (
-                        <div key={sub.id} onClick={()=>setViewingSub(sub)} role="button" tabIndex={0} aria-label={`View submission: ${sub.scenario}, ${labels[sub.level]}, ${statusLabels[sub.status]}`} onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&(e.preventDefault(),setViewingSub(sub))} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                        <div key={sub.id} onClick={()=>setViewingSub(sub)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
                           <div style={{ minWidth:0 }}>
                             <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
                             <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{sub.employeeName?<span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{sub.employeeName} ·</span>:null}{sub.sentDate}</div>
@@ -549,6 +618,7 @@ function App() {
   const [showResumeBanner, setShowResume]   = useState(false);
   const [policies, setPolicies]       = useState([]);
   const [showPolicyLib, setShowPolicyLib]   = useState(false);
+  const [policyLibUnlocked, setPolicyLibUnlocked] = useState(false);
   const [emailAddr, setEmailAddr]           = useState("");
   const [emailStatus, setEmailStatus]       = useState("idle");
   const [checkHistory, setCheckHistory]     = useState([]);
@@ -792,7 +862,7 @@ function App() {
 
   return (
     <div style={s.wrap}>
-      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} />}
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
 
       <div style={{ maxWidth:"var(--pac-content-width)", margin:"0 auto" }} role="main" aria-label="People Action Check">
 
@@ -847,7 +917,7 @@ function App() {
         {/* Session History Box */}
         {step==="pick" && (
           <div style={{ marginBottom:18 }}>
-            <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} role="button" tabIndex={0} aria-expanded={showHistory} aria-label="Toggle session history" onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&(e.preventDefault(),setShowHistory(v=>!v),setViewingPast(null))} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
+            <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <Icon name="history" size={20} color="var(--pac-text)" />
                 <div>
@@ -907,7 +977,7 @@ function App() {
             })() : (
               checkHistory.map((e,i)=>{ const col=C[e.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
                 return (
-                  <div key={e.id} onClick={()=>setViewingPast(i)} role="button" tabIndex={0} aria-label={`View past check: ${e.scenario}, ${labels[e.level]}, ${e.date}`} onKeyDown={ev=>(ev.key==="Enter"||ev.key===" ")&&(ev.preventDefault(),setViewingPast(i))} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
+                  <div key={e.id} onClick={()=>setViewingPast(i)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                       <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
                       <div>
@@ -1006,7 +1076,7 @@ function App() {
             {step==="context" && (
               <div style={{ marginBottom:14 }}>
                 <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:600 }}>Employee name <span style={{ color:"var(--pac-text-dim)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></div>
-                <input type="text" placeholder="e.g. Alex Johnson" aria-label="Employee name" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", color:"var(--pac-text)", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
+                <input type="text" placeholder="e.g. Alex Johnson" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", color:"var(--pac-text)", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
                 <div style={{ fontSize:"0.73rem", color:"var(--pac-text-dim)", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
               </div>
             )}
@@ -1158,7 +1228,7 @@ function App() {
               <div style={{ marginTop:12, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-2)", borderRadius:14, padding:"18px 18px" }}>
                 <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Attach supporting files (optional)</div>
                 <div style={{ fontSize:"0.8rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Tip: before attaching, consider combining emails, Slack/Teams messages, and other documentation into one Word document — it'll come through more cleanly. Screenshots and photos are embedded directly into the report below; other file types are attached separately and sent alongside it.</div>
-                <input ref={fileInputRef} type="file" multiple aria-label="Upload supporting documents" style={{ display:"none" }} onChange={e=>{ if(e.target.files&&e.target.files.length) handleFilesSelected(e.target.files); e.target.value=""; }} />
+                <input ref={fileInputRef} type="file" multiple style={{ display:"none" }} onChange={e=>{ if(e.target.files&&e.target.files.length) handleFilesSelected(e.target.files); e.target.value=""; }} />
                 <button style={s.btn(false)} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}>+ Attach files</button>
                 {attachments.length>0 && (
                   <div style={{ marginTop:12 }}>
