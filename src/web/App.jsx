@@ -117,6 +117,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [viewDoc, setViewDoc]             = useState(null);
   const [editingId, setEditingId]         = useState(null);
   const [showReset, setShowReset]         = useState(false);
+  const [unlockingInView, setUnlockingInView] = useState(false);
   const [hrEmailInput, setHrEmailInput]   = useState(hrEmail||"");
   const [hrEmailSaved, setHrEmailSaved]   = useState(false);
   const [hrEmailSaving, setHrEmailSaving] = useState(false);
@@ -155,14 +156,24 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     reader.readAsArrayBuffer(file);
   });
 
+  const isWordFile = (file) => /\.docx?$/i.test(file.name) || /wordprocessingml|msword/.test(file.type);
+  const isPdfFile  = (file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  const isTextish  = (file) => /\.(txt|md)$/i.test(file.name) || /^text\//.test(file.type);
+
   const readFile = (file) => new Promise((resolve) => {
-    if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
+    if (isWordFile(file) && !isPdfFile(file)) {
+      resolve({ name:file.name, text:"[.doc/.docx files can't be read automatically yet — copy the text and use Paste Text instead.]", size:file.size });
+      return;
+    }
+    if (isPdfFile(file)) {
       if (typeof pdfjsLib === "undefined") {
         resolve({ name:file.name, text:"[PDF reader failed to load — use Paste Text instead.]", size:file.size });
         return;
       }
       resolve(readPdf(file));
-    } else {
+      return;
+    }
+    if (isTextish(file)) {
       const reader = new FileReader();
       reader.onload = (e) => resolve({ name:file.name, text:e.target.result||"", size:file.size });
       reader.onerror = () => {
@@ -170,7 +181,28 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
         resolve({ name:file.name, text:"", size:file.size });
       };
       reader.readAsText(file);
+      return;
     }
+    // Unrecognized name/MIME (e.g. a PDF dropped without a .pdf extension) — sniff the header bytes
+    // rather than assume plain text, so raw binary never lands in the stored policy text.
+    const sniffer = new FileReader();
+    sniffer.onload = (e) => {
+      const header = String.fromCharCode(...new Uint8Array(e.target.result.slice(0, 5)));
+      if (header === "%PDF-") {
+        if (typeof pdfjsLib === "undefined") {
+          resolve({ name:file.name, text:"[PDF reader failed to load — use Paste Text instead.]", size:file.size });
+        } else {
+          resolve(readPdf(file));
+        }
+      } else {
+        resolve({ name:file.name, text:new TextDecoder("utf-8").decode(e.target.result)||"", size:file.size });
+      }
+    };
+    sniffer.onerror = () => {
+      console.error("FileReader failed to read", file.name, sniffer.error);
+      resolve({ name:file.name, text:"", size:file.size });
+    };
+    sniffer.readAsArrayBuffer(file);
   });
 
   const handleFiles = async (files) => {
@@ -279,8 +311,18 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                     {viewDoc.text}
                   </div>
                 </div>
+              ) : unlockingInView ? (
+                <div>
+                  <PinGate onUnlock={()=>{ setUnlocked(true); setUnlockingInView(false); }} />
+                  <button style={{ ...s.btn(false), width:"100%" }} onClick={()=>setUnlockingInView(false)}>Cancel</button>
+                </div>
               ) : (
                 <div>
+                  {!unlocked && (
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setUnlockingInView(true)}>Unlock to remove or edit</button>
+                    </div>
+                  )}
                   {currentScenario && relevantDocs.length>0 && relevantDocs.length<policies.length && (
                     <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.79rem", color:"var(--pac-good)", marginBottom:14 }}>
                       {relevantDocs.length} of {policies.length} documents are relevant to the current scenario.
