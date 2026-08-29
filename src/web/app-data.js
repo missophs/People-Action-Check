@@ -23,7 +23,7 @@ var POLICY_CATEGORIES = [
   { id:"conduct",       label:"Code of Conduct",          color:"#fb7185", scenarios:["Policy Violation","Harassment / Discrimination","Interpersonal Conflict"] },
   { id:"accommodation", label:"Accommodation & ADA",      color:"#a78bfa", scenarios:["Accommodation Request","Leave of Absence"] },
   { id:"separation",    label:"Termination & RIF",        color:"#f97316", scenarios:["Termination Consideration","Reduction in Force","Retaliation Concern"] },
-  { id:"handbook",      label:"Employee Handbook",        color:"#22c1ff", scenarios:["Performance Decline","Attendance Issue","Policy Violation","Interpersonal Conflict","Termination Consideration","Accommodation Request","Harassment / Discrimination","Retaliation Concern","Reduction in Force","Leave of Absence"] },
+  { id:"handbook",      label:"Employee Handbook",        color:"#22c1ff", scenarios:[] },
   { id:"other",         label:"Other / General",          color:"#8899aa", scenarios:[] },
 ];
 
