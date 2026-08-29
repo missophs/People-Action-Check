@@ -115,6 +115,9 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [pasteCategory, setPasteCat]      = useState("handbook");
   const [dragActive, setDragActive]       = useState(false);
   const [viewDoc, setViewDoc]             = useState(null);
+  const [docSearch, setDocSearch]         = useState("");
+  const [docMatchIndex, setDocMatchIndex] = useState(0);
+  const docMatchRefs                      = useRef([]);
   const [editingId, setEditingId]         = useState(null);
   const [showReset, setShowReset]         = useState(false);
   const [unlockingInView, setUnlockingInView] = useState(false);
@@ -140,9 +143,28 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          text += content.items.map(item => item.str).join(" ") + "\n\n";
+          let pageText = "";
+          let lastY = null, lastEndX = null;
+          for (const item of content.items) {
+            const str = item.str;
+            const x = item.transform[4], y = item.transform[5];
+            const height = item.height || Math.abs(item.transform[3]) || 12;
+            if (lastY !== null && Math.abs(y - lastY) > height * 0.4) {
+              // Moved to a new line — a big vertical jump reads as a paragraph break.
+              pageText += Math.abs(y - lastY) > height * 1.6 ? "\n\n" : "\n";
+              lastEndX = null;
+            } else if (lastEndX !== null && str) {
+              // Same line: only insert a space if there's an actual visual gap,
+              // otherwise adjacent glyph runs get smashed together or torn apart.
+              const avgCharWidth = item.width && str.length ? item.width / str.length : height * 0.5;
+              if (x - lastEndX > avgCharWidth * 0.3) pageText += " ";
+            }
+            pageText += str;
+            if (str) { lastEndX = x + (item.width || 0); lastY = y; }
+          }
+          text += pageText.trim() + "\n\n";
         }
-        text = text.trim();
+        text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
         resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
       } catch (err) {
         console.error("PDF parse failed for", file.name, err);
@@ -260,6 +282,63 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     <span style={{ fontSize:"0.6rem", verticalAlign:"middle", marginLeft:5, padding:"1px 5px", borderRadius:"var(--pac-radius-badge)", background:"var(--pac-risk-bg)", color:"var(--pac-risk)", border:"1px solid var(--pac-risk-border-alt)", fontWeight:700, letterSpacing:"0.04em", textTransform:"uppercase" }}>HR</span>
   );
 
+  const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Short, mostly-uppercase lines read as section headings in policy PDFs
+  // (e.g. "1-12. IMMIGRATION POLICY") — bold them so the doc reads like a handbook, not a wall of text.
+  const isHeadingLine = (line) => {
+    const t = line.trim();
+    if (t.length < 3 || t.length > 90) return false;
+    const letters = t.replace(/[^A-Za-z]/g, "");
+    return letters.length >= 3 && letters === letters.toUpperCase();
+  };
+
+  const countDocMatches = (text, query) => {
+    const q = query.trim();
+    if (!q) return 0;
+    const re = new RegExp(escapeRegExp(q), "gi");
+    return (text.match(re) || []).length;
+  };
+
+  // Renders doc text as individual lines (headings bolded) with search matches
+  // wrapped in <mark>; collects one ref per match into refsHolder for scroll-to-match.
+  const renderDocLines = (text, query, activeIndex, refsHolder) => {
+    refsHolder.current = [];
+    let counter = 0;
+    const q = query.trim();
+    const re = q ? new RegExp(`(${escapeRegExp(q)})`, "gi") : null;
+    return text.split("\n").map((line, li) => {
+      if (!line.trim()) return <div key={li} style={{ height:10 }} />;
+      const headingStyle = isHeadingLine(line)
+        ? { fontWeight:700, color:"var(--pac-text)", marginTop:li>0?14:0, marginBottom:4 }
+        : { marginBottom:2 };
+      if (!re) return <div key={li} style={headingStyle}>{line}</div>;
+      const parts = line.split(re);
+      return (
+        <div key={li} style={headingStyle}>
+          {parts.map((part, pi) => {
+            if (pi % 2 !== 1) return <React.Fragment key={pi}>{part}</React.Fragment>;
+            const idx = counter++;
+            const isActive = idx === activeIndex;
+            return (
+              <mark
+                key={pi}
+                ref={el => { if (el) refsHolder.current[idx] = el; }}
+                style={{ background: isActive ? "var(--pac-accent)" : "rgba(255,220,100,0.45)", color: isActive ? "#0a1628" : "inherit", borderRadius:3, padding:"0 1px" }}
+              >{part}</mark>
+            );
+          })}
+        </div>
+      );
+    });
+  };
+
+  useEffect(() => {
+    if (docSearch.trim() && docMatchRefs.current[docMatchIndex]) {
+      docMatchRefs.current[docMatchIndex].scrollIntoView({ block:"center", behavior:"smooth" });
+    }
+  }, [docMatchIndex, docSearch, viewDoc]);
+
   return (
     <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={s.modal} className="fade-in">
@@ -304,11 +383,33 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
               ) : viewDoc ? (
                 <div>
                   <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-                    <button style={s.btn(false)} onClick={()=>setViewDoc(null)}>Back</button>
+                    <button style={s.btn(false)} onClick={()=>{ setViewDoc(null); setDocSearch(""); setDocMatchIndex(0); }}>Back</button>
                     <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{viewDoc.name}</div>
                   </div>
-                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
-                    {viewDoc.text}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                    <input
+                      style={{ ...s.input, flex:1 }}
+                      placeholder="Find in document..."
+                      value={docSearch}
+                      onChange={e=>{ setDocSearch(e.target.value); setDocMatchIndex(0); }}
+                      onKeyDown={e=>{
+                        const total = countDocMatches(viewDoc.text, docSearch);
+                        if (e.key==="Enter" && total>0) setDocMatchIndex(i => e.shiftKey ? (i-1+total)%total : (i+1)%total);
+                      }}
+                    />
+                    {docSearch.trim() && (() => {
+                      const total = countDocMatches(viewDoc.text, docSearch);
+                      return (
+                        <>
+                          <span style={{ fontSize:"0.75rem", color:"var(--pac-text-muted)", whiteSpace:"nowrap" }}>{total ? `${docMatchIndex+1} of ${total}` : "No matches"}</span>
+                          <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i-1+total)%total)}>↑</button>
+                          <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i+1)%total)}>↓</button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", wordBreak:"break-word" }}>
+                    {renderDocLines(viewDoc.text, docSearch, docMatchIndex, docMatchRefs)}
                   </div>
                 </div>
               ) : unlockingInView ? (
