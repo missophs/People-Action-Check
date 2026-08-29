@@ -265,7 +265,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   };
 
   const relevantDocs = currentScenario
-    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(currentScenario)||cat.id==="handbook"||cat.id==="other"); })
+    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(currentScenario)||cat.id==="other"); })
     : policies;
 
   const s = {
@@ -676,7 +676,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
 // ── Contextual policy snippet during questions ────────────────────────────
 function PolicyHint({ policies, scenario }) {
   const [expanded, setExpanded] = useState(false);
-  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
   if (relevant.length===0) return null;
   return (
     <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
@@ -766,7 +766,7 @@ function App() {
     qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
     const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
     if(!forHR){
-      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
       if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
     }
     if(attachments.length){ lines.push("","--- Attached files:"); attachments.forEach(f=>lines.push(`- ${f.name}`)); }
@@ -955,7 +955,7 @@ function App() {
     const lines=[`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
     qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
     const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
-    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
     if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
     lines.push("","General guidance only — not legal advice.");
     navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
@@ -1246,7 +1246,7 @@ function App() {
           const summaries={good:"Your answers indicate this situation is within standard management scope. Document each step you take.",warn:"One or more answers reveal gaps in process, documentation, or legal review. Resolve these before taking action.",risk:"Critical risk factors are present. Acting without HR or legal involvement exposes you and the organization significantly."};
           const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
           const dn=qs.length-sc.yes-sc.no;
-          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)||cat.id==="handbook"); });
+          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
           return (
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
