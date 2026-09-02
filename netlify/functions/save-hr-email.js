@@ -1,9 +1,11 @@
 const { hrConfigStore } = require("./lib/blob-store");
 
-// PAC_ADMIN_TOKEN: required env var. All write requests must include
-// "Authorization: Bearer <token>" — set this in Netlify site environment variables.
-// Missing or mismatched token → 401.
-const ADMIN_TOKEN = process.env.PAC_ADMIN_TOKEN;
+// No PAC_ADMIN_TOKEN check here: the browser client (src/web/app-utils.js
+// saveHrEmailToServer) has no way to hold that server secret, and never
+// sends it — a token check here always 401s regardless of configuration.
+// This setting is gated the same way the rest of Company Policies is: the
+// app's own client-side PIN prompt, matching get-hr-email.js next door,
+// which already reads with no auth at all.
 
 exports.handler = async function (event) {
   const headers = {
@@ -17,14 +19,6 @@ exports.handler = async function (event) {
   }
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, headers, body: "" };
-  }
-
-  if (!ADMIN_TOKEN) {
-    return { statusCode: 503, headers, body: JSON.stringify({ error: "PAC_ADMIN_TOKEN not configured" }) };
-  }
-  const auth = (event.headers["authorization"] || event.headers["Authorization"] || "").replace("Bearer ", "");
-  if (auth !== ADMIN_TOKEN) {
-    return { statusCode: 401, headers, body: JSON.stringify({ error: "Unauthorized" }) };
   }
 
   let hrEmail;
