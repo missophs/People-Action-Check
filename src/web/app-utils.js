@@ -42,11 +42,16 @@ function openPdfDb() {
     req.onerror   = function() { reject(req.error); };
   });
 }
-async function savePdfBlob(id, blob) {
+async function savePdfBlob(id, file) {
+  // Stored as raw bytes, not the File/Blob object itself — Safari's IndexedDB
+  // can silently fail to structured-clone a File, which left uploads stuck on
+  // the plain-text fallback with no error shown. ArrayBuffers clone reliably
+  // everywhere.
+  var buf = await file.arrayBuffer();
   var db = await openPdfDb();
   return new Promise(function(resolve, reject) {
     var tx = db.transaction(PDF_STORE, "readwrite");
-    tx.objectStore(PDF_STORE).put(blob, id);
+    tx.objectStore(PDF_STORE).put(buf, id);
     tx.oncomplete = function() { resolve(); };
     tx.onerror    = function() { reject(tx.error); };
   });

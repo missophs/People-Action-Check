@@ -121,8 +121,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [pdfPage, setPdfPage]             = useState(1);
   const [pdfNumPages, setPdfNumPages]     = useState(0);
   const [pdfLoadState, setPdfLoadState]   = useState("idle"); // idle | loading | ready | error
-  const pdfDocRef                         = useRef(null);
-  const pdfCanvasRef                      = useRef(null);
+  const [pdfObjectUrl, setPdfObjectUrl]   = useState(null);
   const [editingId, setEditingId]         = useState(null);
   const [showReset, setShowReset]         = useState(false);
   const [unlockingInView, setUnlockingInView] = useState(false);
@@ -414,52 +413,36 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     }
   }, [docMatchIndex, docSearch, viewDoc]);
 
-  // Loads the stored PDF bytes for the open document and hands them to
-  // pdf.js. Runs once per doc switch — the actual per-page canvas draw is a
-  // separate effect below, since flipping pages shouldn't re-fetch the file.
+  // Loads the stored PDF bytes for the open document and hands them to the
+  // browser's own PDF reader via an object URL, instead of redrawing pages
+  // onto a canvas ourselves — simpler, and it's what actually gives the
+  // native document look. pdf.js is still used here, but only to read the
+  // page count for the Prev/Next controls below.
   useEffect(() => {
     let cancelled = false;
-    pdfDocRef.current = null;
+    let url = null;
     setPdfNumPages(0);
     setPdfPage(1);
+    setPdfObjectUrl(null);
     if (!viewDoc || !viewDoc.hasPdf) { setPdfLoadState("idle"); return; }
     setPdfLoadState("loading");
     (async () => {
       try {
-        const blob = await loadPdfBlob(viewDoc.id);
-        if (!blob) throw new Error("no stored PDF for this document");
-        const buf = await blob.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const buf = await loadPdfBlob(viewDoc.id);
+        if (!buf) throw new Error("no stored PDF for this document");
+        const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
         if (cancelled) return;
-        pdfDocRef.current = pdf;
+        url = URL.createObjectURL(new Blob([buf], { type: "application/pdf" }));
         setPdfNumPages(pdf.numPages);
+        setPdfObjectUrl(url);
         setPdfLoadState("ready");
       } catch (err) {
         console.error("Couldn't load stored PDF pages for", viewDoc && viewDoc.name, err);
         if (!cancelled) setPdfLoadState("error");
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [viewDoc]);
-
-  // Draws the current page onto the canvas, scaled to fit the panel width.
-  useEffect(() => {
-    if (pdfLoadState !== "ready" || !pdfDocRef.current || !pdfCanvasRef.current) return;
-    let cancelled = false;
-    (async () => {
-      const page = await pdfDocRef.current.getPage(pdfPage);
-      if (cancelled || !pdfCanvasRef.current) return;
-      const containerWidth = (pdfCanvasRef.current.parentElement && pdfCanvasRef.current.parentElement.clientWidth) || 600;
-      const unscaled = page.getViewport({ scale: 1 });
-      const scale = Math.max(0.5, Math.min(2.5, containerWidth / unscaled.width));
-      const viewport = page.getViewport({ scale });
-      const canvas = pdfCanvasRef.current;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-    })();
-    return () => { cancelled = true; };
-  }, [pdfPage, pdfLoadState]);
 
   return (
     <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -560,8 +543,15 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                             <span style={{ fontSize:"0.78rem", color:"var(--pac-text-muted)" }}>Page {pdfPage} of {pdfNumPages}</span>
                             <button style={s.btn(false)} disabled={pdfPage>=pdfNumPages} onClick={()=>setPdfPage(p=>Math.min(pdfNumPages,p+1))}>Next →</button>
                           </div>
-                          <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:10, maxHeight:460, overflow:"auto", textAlign:"center" }}>
-                            <canvas ref={pdfCanvasRef} style={{ maxWidth:"100%", borderRadius:6 }} />
+                          <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, overflow:"hidden" }}>
+                            {pdfObjectUrl && (
+                              <iframe
+                                key={pdfPage}
+                                src={`${pdfObjectUrl}#page=${pdfPage}`}
+                                title={viewDoc.name}
+                                style={{ width:"100%", height:460, border:"none", display:"block", background:"#fff" }}
+                              />
+                            )}
                           </div>
                         </div>
                       )}
