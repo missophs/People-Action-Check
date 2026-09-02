@@ -118,6 +118,11 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [docSearch, setDocSearch]         = useState("");
   const [docMatchIndex, setDocMatchIndex] = useState(0);
   const docMatchRefs                      = useRef([]);
+  const [pdfPage, setPdfPage]             = useState(1);
+  const [pdfNumPages, setPdfNumPages]     = useState(0);
+  const [pdfLoadState, setPdfLoadState]   = useState("idle"); // idle | loading | ready | error
+  const pdfDocRef                         = useRef(null);
+  const pdfCanvasRef                      = useRef(null);
   const [editingId, setEditingId]         = useState(null);
   const [showReset, setShowReset]         = useState(false);
   const [unlockingInView, setUnlockingInView] = useState(false);
@@ -189,12 +194,20 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
           return isPageNumber(t) && t.length <= 12;
         };
 
-        let text = pageLines
-          .map((lines) => lines.filter((l) => !isBoilerplate(l)).join("\n").trim())
-          .filter(Boolean)
-          .join("\n\n");
-        text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-        resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
+        // One entry per real PDF page (index i = page i+1), kept in parallel with
+        // the flattened `text` below — the page viewer renders actual page
+        // images and needs search results mapped back to a page number, which
+        // a single joined string can't give it.
+        const pageTexts = pageLines.map((lines) =>
+          lines.filter((l) => !isBoilerplate(l)).join("\n").trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")
+        );
+        let text = pageTexts.filter(Boolean).join("\n\n").trim();
+        resolve({
+          name: file.name,
+          text: text.substring(0,200000) || "[This PDF has no extractable text (likely a scanned image) — Find-in-document search won't return results, but the pages are still viewable below.]",
+          pageTexts,
+          size: file.size,
+        });
       } catch (err) {
         console.error("PDF parse failed for", file.name, err);
         resolve({ name:file.name, text:"[PDF could not be parsed — use Paste Text instead.]", size:file.size });
@@ -260,7 +273,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     const results = [];
     for (const file of Array.from(files)) {
       if (file.size > 5*1024*1024) { alert(`${file.name} is over 5MB. Please paste the text directly.`); continue; }
-      const { name, text } = await readFile(file);
+      const { name, text, pageTexts } = await readFile(file);
       const lower = (name+" "+text.substring(0,500)).toLowerCase();
       let autoCategory = "other";
       if (lower.match(/attendance|absent|tardiness|late|leave policy/)) autoCategory = "attendance";
@@ -269,7 +282,17 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
       else if (lower.match(/accommodat|ada|disability|reasonable/)) autoCategory = "accommodation";
       else if (lower.match(/termination|separation|severance|rif|layoff/)) autoCategory = "separation";
       else if (lower.match(/harassment|discrimination|eeoc|complaint/)) autoCategory = "conduct";
-      results.push({ id:Date.now()+Math.random(), name, text, category:autoCategory, addedAt:new Date().toLocaleDateString(), chars:text.length });
+      const id = Date.now()+Math.random();
+      // A PDF that parsed successfully gets its real bytes stored in IndexedDB
+      // (see app-utils.js) so it can be rendered as actual pages later, not
+      // just the reflowed text — that's true whether or not it had a text
+      // layer to extract (a scanned PDF still renders fine as page images).
+      let hasPdf = false;
+      if (Array.isArray(pageTexts)) {
+        try { await savePdfBlob(id, file); hasPdf = true; }
+        catch (err) { console.error("Couldn't store PDF pages for", name, err); }
+      }
+      results.push({ id, name, text, pageTexts: hasPdf?pageTexts:undefined, hasPdf, category:autoCategory, addedAt:new Date().toLocaleDateString(), chars:text.length });
     }
     if (results.length) { const u=[...policies,...results]; setPolicies(u); savePolicies(u); setTab("view"); }
   };
@@ -283,6 +306,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const removeDoc = (id) => {
     const u=policies.filter(p=>p.id!==id); setPolicies(u); savePolicies(u);
     if (viewDoc&&viewDoc.id===id) setViewDoc(null);
+    deletePdfBlob(id).catch(()=>{});
   };
 
   const updateCategory = (id, cat) => { const u=policies.map(p=>p.id===id?{...p,category:cat}:p); setPolicies(u); savePolicies(u); };
@@ -291,6 +315,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     if (!window.confirm("This will delete all stored policies and reset the PIN to 1234. This cannot be undone.")) return;
     savePolicies([]); setPolicies([]); savePinHash(DEFAULT_PIN_HASH);
     setShowReset(false); setUnlocked(false); setTab("view");
+    clearAllPdfBlobs().catch(()=>{});
   };
 
   const relevantDocs = currentScenario
@@ -327,6 +352,27 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     if (!q) return 0;
     const re = new RegExp(escapeRegExp(q), "gi");
     return (text.match(re) || []).length;
+  };
+
+  // Same idea as countDocMatches, but for the real-page viewer: matches need a
+  // page number to jump to (a rendered PDF page has no text nodes to scroll
+  // to), so this returns one entry per match with its page and a bit of
+  // surrounding text instead of just a count.
+  const matchLocations = (pageTexts, query) => {
+    const q = query.trim();
+    if (!q || !Array.isArray(pageTexts)) return [];
+    const out = [];
+    pageTexts.forEach((pt, i) => {
+      const re = new RegExp(escapeRegExp(q), "gi");
+      let m;
+      while ((m = re.exec(pt))) {
+        const start = Math.max(0, m.index - 40);
+        const end = Math.min(pt.length, m.index + q.length + 40);
+        out.push({ page: i + 1, snippet: (start>0?"…":"") + pt.slice(start, end).trim() + (end<pt.length?"…":"") });
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+    });
+    return out;
   };
 
   // Renders doc text as individual lines (headings bolded) with search matches
@@ -367,6 +413,53 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
       docMatchRefs.current[docMatchIndex].scrollIntoView({ block:"center", behavior:"smooth" });
     }
   }, [docMatchIndex, docSearch, viewDoc]);
+
+  // Loads the stored PDF bytes for the open document and hands them to
+  // pdf.js. Runs once per doc switch — the actual per-page canvas draw is a
+  // separate effect below, since flipping pages shouldn't re-fetch the file.
+  useEffect(() => {
+    let cancelled = false;
+    pdfDocRef.current = null;
+    setPdfNumPages(0);
+    setPdfPage(1);
+    if (!viewDoc || !viewDoc.hasPdf) { setPdfLoadState("idle"); return; }
+    setPdfLoadState("loading");
+    (async () => {
+      try {
+        const blob = await loadPdfBlob(viewDoc.id);
+        if (!blob) throw new Error("no stored PDF for this document");
+        const buf = await blob.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        if (cancelled) return;
+        pdfDocRef.current = pdf;
+        setPdfNumPages(pdf.numPages);
+        setPdfLoadState("ready");
+      } catch (err) {
+        console.error("Couldn't load stored PDF pages for", viewDoc && viewDoc.name, err);
+        if (!cancelled) setPdfLoadState("error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewDoc]);
+
+  // Draws the current page onto the canvas, scaled to fit the panel width.
+  useEffect(() => {
+    if (pdfLoadState !== "ready" || !pdfDocRef.current || !pdfCanvasRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const page = await pdfDocRef.current.getPage(pdfPage);
+      if (cancelled || !pdfCanvasRef.current) return;
+      const containerWidth = (pdfCanvasRef.current.parentElement && pdfCanvasRef.current.parentElement.clientWidth) || 600;
+      const unscaled = page.getViewport({ scale: 1 });
+      const scale = Math.max(0.5, Math.min(2.5, containerWidth / unscaled.width));
+      const viewport = page.getViewport({ scale });
+      const canvas = pdfCanvasRef.current;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    })();
+    return () => { cancelled = true; };
+  }, [pdfPage, pdfLoadState]);
 
   return (
     <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -415,31 +508,93 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                     <button style={s.btn(false)} onClick={()=>{ setViewDoc(null); setDocSearch(""); setDocMatchIndex(0); }}>Back</button>
                     <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{viewDoc.name}</div>
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                    <input
-                      style={{ ...s.input, flex:1 }}
-                      placeholder="Find in document..."
-                      value={docSearch}
-                      onChange={e=>{ setDocSearch(e.target.value); setDocMatchIndex(0); }}
-                      onKeyDown={e=>{
-                        const total = countDocMatches(viewDoc.text, docSearch);
-                        if (e.key==="Enter" && total>0) setDocMatchIndex(i => e.shiftKey ? (i-1+total)%total : (i+1)%total);
-                      }}
-                    />
-                    {docSearch.trim() && (() => {
-                      const total = countDocMatches(viewDoc.text, docSearch);
-                      return (
-                        <>
-                          <span style={{ fontSize:"0.75rem", color:"var(--pac-text-muted)", whiteSpace:"nowrap" }}>{total ? `${docMatchIndex+1} of ${total}` : "No matches"}</span>
-                          <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i-1+total)%total)}>↑</button>
-                          <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i+1)%total)}>↓</button>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", wordBreak:"break-word" }}>
-                    {renderDocLines(viewDoc.text, docSearch, docMatchIndex, docMatchRefs)}
-                  </div>
+
+                  {pdfLoadState==="error" && (
+                    <div style={{ background:"var(--pac-risk-bg)", border:"1px solid var(--pac-risk-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.78rem", color:"var(--pac-risk)", marginBottom:12 }}>
+                      Couldn't load the stored pages for this file (it may have been uploaded before page view was added, or browser storage was cleared) — showing the extracted text instead.
+                    </div>
+                  )}
+
+                  {viewDoc.hasPdf && pdfLoadState!=="error" ? (
+                    <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                        <input
+                          style={{ ...s.input, flex:1 }}
+                          placeholder="Find in document..."
+                          value={docSearch}
+                          onChange={e=>{ setDocSearch(e.target.value); setDocMatchIndex(0); }}
+                          onKeyDown={e=>{
+                            const matches = matchLocations(viewDoc.pageTexts||[], docSearch);
+                            if (e.key==="Enter" && matches.length>0) {
+                              const ni = e.shiftKey ? (docMatchIndex-1+matches.length)%matches.length : (docMatchIndex+1)%matches.length;
+                              setDocMatchIndex(ni); setPdfPage(matches[ni].page);
+                            }
+                          }}
+                        />
+                        {docSearch.trim() && (() => {
+                          const matches = matchLocations(viewDoc.pageTexts||[], docSearch);
+                          const total = matches.length;
+                          return (
+                            <>
+                              <span style={{ fontSize:"0.75rem", color:"var(--pac-text-muted)", whiteSpace:"nowrap" }}>{total ? `${docMatchIndex+1} of ${total}` : "No matches"}</span>
+                              <button style={s.btn(false)} disabled={!total} onClick={()=>{ const ni=(docMatchIndex-1+total)%total; setDocMatchIndex(ni); setPdfPage(matches[ni].page); }}>↑</button>
+                              <button style={s.btn(false)} disabled={!total} onClick={()=>{ const ni=(docMatchIndex+1)%total; setDocMatchIndex(ni); setPdfPage(matches[ni].page); }}>↓</button>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      {docSearch.trim() && (() => {
+                        const matches = matchLocations(viewDoc.pageTexts||[], docSearch);
+                        const m = matches[docMatchIndex];
+                        return m ? (
+                          <div style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)", marginBottom:8 }}>Page {m.page}: "{m.snippet}"</div>
+                        ) : null;
+                      })()}
+
+                      {pdfLoadState==="loading" ? (
+                        <div style={{ textAlign:"center", padding:"48px 0", color:"var(--pac-text-muted)", fontSize:"0.82rem" }}>Loading pages…</div>
+                      ) : (
+                        <div>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, marginBottom:8 }}>
+                            <button style={s.btn(false)} disabled={pdfPage<=1} onClick={()=>setPdfPage(p=>Math.max(1,p-1))}>← Prev</button>
+                            <span style={{ fontSize:"0.78rem", color:"var(--pac-text-muted)" }}>Page {pdfPage} of {pdfNumPages}</span>
+                            <button style={s.btn(false)} disabled={pdfPage>=pdfNumPages} onClick={()=>setPdfPage(p=>Math.min(pdfNumPages,p+1))}>Next →</button>
+                          </div>
+                          <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:10, maxHeight:460, overflow:"auto", textAlign:"center" }}>
+                            <canvas ref={pdfCanvasRef} style={{ maxWidth:"100%", borderRadius:6 }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                        <input
+                          style={{ ...s.input, flex:1 }}
+                          placeholder="Find in document..."
+                          value={docSearch}
+                          onChange={e=>{ setDocSearch(e.target.value); setDocMatchIndex(0); }}
+                          onKeyDown={e=>{
+                            const total = countDocMatches(viewDoc.text, docSearch);
+                            if (e.key==="Enter" && total>0) setDocMatchIndex(i => e.shiftKey ? (i-1+total)%total : (i+1)%total);
+                          }}
+                        />
+                        {docSearch.trim() && (() => {
+                          const total = countDocMatches(viewDoc.text, docSearch);
+                          return (
+                            <>
+                              <span style={{ fontSize:"0.75rem", color:"var(--pac-text-muted)", whiteSpace:"nowrap" }}>{total ? `${docMatchIndex+1} of ${total}` : "No matches"}</span>
+                              <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i-1+total)%total)}>↑</button>
+                              <button style={s.btn(false)} disabled={!total} onClick={()=>setDocMatchIndex(i=>(i+1)%total)}>↓</button>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", wordBreak:"break-word" }}>
+                        {renderDocLines(viewDoc.text, docSearch, docMatchIndex, docMatchRefs)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : unlockingInView ? (
                 <div>
@@ -514,7 +669,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   <input ref={fileRef} type="file" multiple accept=".txt,.pdf,.doc,.docx,.md,text/plain,application/pdf" style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
                 </div>
                 <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.78rem", color:"var(--pac-accent-text-85)", lineHeight:1.5, marginBottom:16 }}>
-                  PDF tip: Scanned/image-only PDFs can't be read automatically — for those, copy the text and use the Paste Text tab instead.
+                  PDF tip: every PDF still displays as real pages, including scanned/image-only ones. But scanned PDFs have no text layer to search — for a searchable copy of those, copy the text and use the Paste Text tab instead.
                 </div>
                 {/* Change PIN + Reset */}
                 <div style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
