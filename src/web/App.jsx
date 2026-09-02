@@ -139,7 +139,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     reader.onload = async (e) => {
       try {
         const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
-        let text = "";
+        const pageLines = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
@@ -162,8 +162,37 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
             pageText += str;
             if (str) { lastEndX = x + (item.width || 0); lastY = y; }
           }
-          text += pageText.trim() + "\n\n";
+          pageLines.push(pageText.trim().split("\n"));
         }
+
+        // Running headers/footers (e.g. "Company Name | Modified by...") repeat
+        // verbatim on nearly every page, and bare page numbers ("0", "1", "2"...)
+        // show up as their own line since they sit apart from body text. Neither
+        // reads as real content — left in, a handbook renders as the same header
+        // line duplicated dozens of times with stray digits scattered through it.
+        const lineCounts = new Map();
+        for (const lines of pageLines) {
+          const seenOnPage = new Set();
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t || seenOnPage.has(t)) continue;
+            seenOnPage.add(t);
+            lineCounts.set(t, (lineCounts.get(t) || 0) + 1);
+          }
+        }
+        const pageCount = pageLines.length;
+        const isPageNumber = (t) => /^(page\s*)?\d{1,4}(\s*(\/|of)\s*\d{1,4})?$/i.test(t);
+        const isBoilerplate = (line) => {
+          const t = line.trim();
+          if (!t) return false;
+          if (pageCount > 2 && lineCounts.get(t) >= Math.ceil(pageCount * 0.6)) return true;
+          return isPageNumber(t) && t.length <= 12;
+        };
+
+        let text = pageLines
+          .map((lines) => lines.filter((l) => !isBoilerplate(l)).join("\n").trim())
+          .filter(Boolean)
+          .join("\n\n");
         text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
         resolve({ name:file.name, text:text.substring(0,200000)||"[PDF uploaded, but it contains no extractable text (likely a scanned image) — use Paste Text instead.]", size:file.size });
       } catch (err) {
