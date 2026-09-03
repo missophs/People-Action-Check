@@ -89,9 +89,40 @@ async function saveHrEmailToServer(v) {
   if (!res.ok) throw new Error("save failed");
 }
 
-// ── HR submissions ────────────────────────────────────────────────────────
-function loadHrSubmissions() { try { var d=localStorage.getItem(HR_SUBMISSIONS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
-function saveHrSubmissions(d){ try { localStorage.setItem(HR_SUBMISSIONS_KEY, JSON.stringify(d.slice(0,50))); } catch(e) {} }
+// ── HR submissions (server-synced — different HR staff on different devices
+// need the same shared inbox, not one each; see netlify/functions/hr-submissions.js) ─
+async function fetchHrSubmissions() {
+  var res = await fetch("/api/hr-submissions");
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.submissions || [];
+}
+async function createHrSubmission(sub) {
+  var res = await fetch("/api/hr-submissions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub),
+  });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
+}
+async function updateHrSubmission(id, patch) {
+  var res = await fetch("/api/hr-submissions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...patch, id: id }),
+  });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
+}
+async function deleteHrSubmission(id) {
+  var res = await fetch("/api/hr-submissions?id=" + encodeURIComponent(id), { method: "DELETE" });
+  if (!res.ok) throw new Error("delete failed");
+}
+async function clearHrSubmissions() {
+  var res = await fetch("/api/hr-submissions", { method: "DELETE" });
+  if (!res.ok) throw new Error("clear failed");
+}
 
 // ── Follow-ups ────────────────────────────────────────────────────────────
 function loadFollowups()     { try { var d=localStorage.getItem(HR_FOLLOWUPS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }

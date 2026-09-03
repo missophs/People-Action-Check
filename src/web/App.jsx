@@ -134,9 +134,11 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [slackSaved, setSlackSaved]       = useState(false);
   const [teamsInput, setTeamsInput]       = useState(teamsWebhook||"");
   const [teamsSaved, setTeamsSaved]       = useState(false);
-  const [hrSubmissions, setHrSubmissions] = useState(()=>loadHrSubmissions());
+  const [hrSubmissions, setHrSubmissions] = useState([]);
   const [viewingSub, setViewingSub]       = useState(null);
   const fileRef = useRef(null);
+
+  useEffect(() => { fetchHrSubmissions().then(setHrSubmissions).catch(err => console.error("Couldn't load HR submissions", err)); }, []);
 
   const readPdf = (file) => new Promise((resolve) => {
     const reader = new FileReader();
@@ -810,8 +812,9 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                   const statusLabels = {pending:"Pending Review",reviewing:"In Review",resolved:"Resolved"};
                   const updateSub = (patch) => {
                     const patched = {...sub,...patch};
-                    const updated = hrSubmissions.map(s=>s.id===sub.id?patched:s);
-                    setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(patched);
+                    setHrSubmissions(hrSubmissions.map(s=>s.id===sub.id?patched:s));
+                    setViewingSub(patched);
+                    updateHrSubmission(sub.id, patch).catch(err => console.error("Couldn't save HR submission update", err));
                   };
                   return (
                     <div>
@@ -851,13 +854,13 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                           );
                         })}
                       </div>
-                      <button style={{ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-risk-bg-alt)", background:"transparent", color:"var(--pac-risk)", cursor:"pointer", fontSize:"0.74rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>{ const updated=hrSubmissions.filter(s=>s.id!==sub.id); setHrSubmissions(updated); saveHrSubmissions(updated); setViewingSub(null); }}>Delete this record</button>
+                      <button style={{ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-risk-bg-alt)", background:"transparent", color:"var(--pac-risk)", cursor:"pointer", fontSize:"0.74rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>{ setHrSubmissions(hrSubmissions.filter(s=>s.id!==sub.id)); setViewingSub(null); deleteHrSubmission(sub.id).catch(err => console.error("Couldn't delete HR submission", err)); }}>Delete this record</button>
                     </div>
                   );
                 })() : (
                   <div>
                     <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ if(!window.confirm("Delete all HR submissions? This cannot be undone."))return; saveHrSubmissions([]); setHrSubmissions([]); }}>Clear all</button>
+                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ if(!window.confirm("Delete all HR submissions? This cannot be undone."))return; setHrSubmissions([]); clearHrSubmissions().catch(err => console.error("Couldn't clear HR submissions", err)); }}>Clear all</button>
                     </div>
                     {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"};
                       return (
@@ -1123,9 +1126,8 @@ function App() {
         body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — People Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
       });
       if (!res.ok) throw new Error("send failed");
-      const submission = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
-      const updated = [submission, ...loadHrSubmissions()];
-      saveHrSubmissions(updated);
+      const submission = { scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
+      await createHrSubmission(submission);
       notifyWebhook(slackWebhook, submission);
       notifyWebhook(teamsWebhook, submission);
       setHrEmailStatus("sent");
