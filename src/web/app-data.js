@@ -4,7 +4,6 @@
 
 // ── Storage keys ──────────────────────────────────────────────────────────
 var SAVE_KEY           = "hr_check_session_v3";
-var POLICIES_KEY       = "hr_check_policies_v3";
 var PIN_KEY            = "hr_check_pin_v3";
 var HISTORY_KEY        = "hr_check_history_v1";
 var HR_EMAIL_KEY       = "hr_check_hr_email_v1";

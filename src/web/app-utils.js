@@ -21,67 +21,44 @@ function saveSession(d)    { try { localStorage.setItem(SAVE_KEY, JSON.stringify
 function loadSession()     { try { var d=localStorage.getItem(SAVE_KEY); return d?JSON.parse(d):null; } catch(e){return null;} }
 function clearSession()    { try { localStorage.removeItem(SAVE_KEY); } catch(e) {} }
 
-// ── Policies ──────────────────────────────────────────────────────────────
-function savePolicies(d)   { try { localStorage.setItem(POLICIES_KEY, JSON.stringify(d)); } catch(e) {} }
-function loadPolicies()    { try { var d=localStorage.getItem(POLICIES_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
-
-// ── Uploaded PDF pages (IndexedDB, not localStorage) ────────────────────────
-// Policy metadata (name/extracted text/category) is small and stays in
-// localStorage above. The original PDF bytes are what real page rendering
-// needs, and those can run several MB — well past localStorage's ~5-10MB
-// per-origin cap once a couple of handbooks are uploaded. IndexedDB has no
-// such practical limit, so the raw file blob lives here, keyed by policy id.
-var PDF_DB_NAME = "pac_files";
-var PDF_STORE   = "pdfs";
-function openPdfDb() {
-  return new Promise(function(resolve, reject) {
-    if (typeof indexedDB === "undefined") { reject(new Error("IndexedDB not available")); return; }
-    var req = indexedDB.open(PDF_DB_NAME, 1);
-    req.onupgradeneeded = function() { req.result.createObjectStore(PDF_STORE); };
-    req.onsuccess = function() { resolve(req.result); };
-    req.onerror   = function() { reject(req.error); };
-  });
+// ── Policies (server-synced Netlify Blobs — Slack needs to read these too,
+// so browser-only storage isn't an option; see netlify/functions/policy-store.js) ─
+async function fetchPolicies() {
+  var res = await fetch("/api/policy-store");
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.policies || [];
 }
-async function savePdfBlob(id, file) {
-  // Stored as raw bytes, not the File/Blob object itself — Safari's IndexedDB
-  // can silently fail to structured-clone a File, which left uploads stuck on
-  // the plain-text fallback with no error shown. ArrayBuffers clone reliably
-  // everywhere.
-  var buf = await file.arrayBuffer();
-  var db = await openPdfDb();
-  return new Promise(function(resolve, reject) {
-    var tx = db.transaction(PDF_STORE, "readwrite");
-    tx.objectStore(PDF_STORE).put(buf, id);
-    tx.oncomplete = function() { resolve(); };
-    tx.onerror    = function() { reject(tx.error); };
-  });
+async function fetchPolicyContent(id) {
+  var res = await fetch("/api/policy-store?id=" + encodeURIComponent(id));
+  if (!res.ok) throw new Error("fetch failed");
+  return res.json();
 }
-async function loadPdfBlob(id) {
-  var db = await openPdfDb();
-  return new Promise(function(resolve, reject) {
-    var tx = db.transaction(PDF_STORE, "readonly");
-    var req = tx.objectStore(PDF_STORE).get(id);
-    req.onsuccess = function() { resolve(req.result || null); };
-    req.onerror   = function() { reject(req.error); };
+async function createPolicy(doc) {
+  var res = await fetch("/api/policy-store", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(doc),
   });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
 }
-async function deletePdfBlob(id) {
-  var db = await openPdfDb();
-  return new Promise(function(resolve, reject) {
-    var tx = db.transaction(PDF_STORE, "readwrite");
-    tx.objectStore(PDF_STORE).delete(id);
-    tx.oncomplete = function() { resolve(); };
-    tx.onerror    = function() { reject(tx.error); };
+async function updatePolicyCategory(id, category) {
+  var res = await fetch("/api/policy-store", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id, category: category }),
   });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
 }
-async function clearAllPdfBlobs() {
-  var db = await openPdfDb();
-  return new Promise(function(resolve, reject) {
-    var tx = db.transaction(PDF_STORE, "readwrite");
-    tx.objectStore(PDF_STORE).clear();
-    tx.oncomplete = function() { resolve(); };
-    tx.onerror    = function() { reject(tx.error); };
-  });
+async function deletePolicy(id) {
+  var res = await fetch("/api/policy-store?id=" + encodeURIComponent(id), { method: "DELETE" });
+  if (!res.ok) throw new Error("delete failed");
+}
+async function resetAllPolicies() {
+  var res = await fetch("/api/policy-store", { method: "DELETE" });
+  if (!res.ok) throw new Error("reset failed");
 }
 
 // ── Check history ─────────────────────────────────────────────────────────

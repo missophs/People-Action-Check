@@ -268,53 +268,78 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     sniffer.readAsArrayBuffer(file);
   });
 
+  const [uploading, setUploading] = useState(false);
+
+  const bytesToBase64 = (bytes) => {
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  };
+
   const handleFiles = async (files) => {
-    const results = [];
-    for (const file of Array.from(files)) {
-      if (file.size > 5*1024*1024) { alert(`${file.name} is over 5MB. Please paste the text directly.`); continue; }
-      const { name, text, pageTexts } = await readFile(file);
-      const lower = (name+" "+text.substring(0,500)).toLowerCase();
-      let autoCategory = "other";
-      if (lower.match(/attendance|absent|tardiness|late|leave policy/)) autoCategory = "attendance";
-      else if (lower.match(/performance|pip|improvement|coaching|discipline/)) autoCategory = "performance";
-      else if (lower.match(/handbook|code of conduct|workplace policy/)) autoCategory = "handbook";
-      else if (lower.match(/accommodat|ada|disability|reasonable/)) autoCategory = "accommodation";
-      else if (lower.match(/termination|separation|severance|rif|layoff/)) autoCategory = "separation";
-      else if (lower.match(/harassment|discrimination|eeoc|complaint/)) autoCategory = "conduct";
-      const id = Date.now()+Math.random();
-      // A PDF that parsed successfully gets its real bytes stored in IndexedDB
-      // (see app-utils.js) so it can be rendered as actual pages later, not
-      // just the reflowed text — that's true whether or not it had a text
-      // layer to extract (a scanned PDF still renders fine as page images).
-      let hasPdf = false;
-      if (Array.isArray(pageTexts)) {
-        try { await savePdfBlob(id, file); hasPdf = true; }
-        catch (err) { console.error("Couldn't store PDF pages for", name, err); }
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > 5*1024*1024) { alert(`${file.name} is over 5MB. Please paste the text directly.`); continue; }
+        const { name, text, pageTexts } = await readFile(file);
+        const lower = (name+" "+text.substring(0,500)).toLowerCase();
+        let autoCategory = "other";
+        if (lower.match(/attendance|absent|tardiness|late|leave policy/)) autoCategory = "attendance";
+        else if (lower.match(/performance|pip|improvement|coaching|discipline/)) autoCategory = "performance";
+        else if (lower.match(/handbook|code of conduct|workplace policy/)) autoCategory = "handbook";
+        else if (lower.match(/accommodat|ada|disability|reasonable/)) autoCategory = "accommodation";
+        else if (lower.match(/termination|separation|severance|rif|layoff/)) autoCategory = "separation";
+        else if (lower.match(/harassment|discrimination|eeoc|complaint/)) autoCategory = "conduct";
+        let pdfBase64;
+        if (Array.isArray(pageTexts)) {
+          try { pdfBase64 = bytesToBase64(new Uint8Array(await file.arrayBuffer())); }
+          catch (err) { console.error("Couldn't encode PDF bytes for", name, err); }
+        }
+        try {
+          const meta = await createPolicy({ name, text, pageTexts: pdfBase64 ? pageTexts : undefined, pdfBase64, category: autoCategory });
+          setPolicies(p => [...p, meta]);
+        } catch (err) {
+          console.error("Couldn't save policy", name, err);
+          alert(`Couldn't save ${name}. Check your connection and try again.`);
+        }
       }
-      results.push({ id, name, text, pageTexts: hasPdf?pageTexts:undefined, hasPdf, category:autoCategory, addedAt:new Date().toLocaleDateString(), chars:text.length });
+      setTab("view");
+    } finally {
+      setUploading(false);
     }
-    if (results.length) { const u=[...policies,...results]; setPolicies(u); savePolicies(u); setTab("view"); }
   };
 
-  const addPaste = () => {
+  const addPaste = async () => {
     if (!pasteText.trim()) return;
-    const doc = { id:Date.now()+Math.random(), name:pasteName.trim()||"Pasted policy "+(policies.length+1), text:pasteText.trim(), category:pasteCategory, addedAt:new Date().toLocaleDateString(), chars:pasteText.trim().length };
-    const u=[...policies,doc]; setPolicies(u); savePolicies(u); setPasteText(""); setPasteName(""); setTab("view");
+    try {
+      const meta = await createPolicy({ name: pasteName.trim()||"Pasted policy "+(policies.length+1), text: pasteText.trim(), category: pasteCategory });
+      setPolicies(p => [...p, meta]);
+      setPasteText(""); setPasteName(""); setTab("view");
+    } catch (err) {
+      console.error("Couldn't save pasted policy", err);
+      alert("Couldn't save. Check your connection and try again.");
+    }
   };
 
-  const removeDoc = (id) => {
-    const u=policies.filter(p=>p.id!==id); setPolicies(u); savePolicies(u);
+  const removeDoc = async (id) => {
     if (viewDoc&&viewDoc.id===id) setViewDoc(null);
-    deletePdfBlob(id).catch(()=>{});
+    setPolicies(p => p.filter(d=>d.id!==id));
+    try { await deletePolicy(id); }
+    catch (err) { console.error("Couldn't delete policy", id, err); }
   };
 
-  const updateCategory = (id, cat) => { const u=policies.map(p=>p.id===id?{...p,category:cat}:p); setPolicies(u); savePolicies(u); };
+  const updateCategory = async (id, cat) => {
+    setPolicies(p => p.map(d=>d.id===id?{...d,category:cat}:d));
+    try { await updatePolicyCategory(id, cat); }
+    catch (err) { console.error("Couldn't update category", id, err); }
+  };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!window.confirm("This will delete all stored policies and reset the PIN to 1234. This cannot be undone.")) return;
-    savePolicies([]); setPolicies([]); savePinHash(DEFAULT_PIN_HASH);
+    setPolicies([]); savePinHash(DEFAULT_PIN_HASH);
     setShowReset(false); setUnlocked(false); setTab("view");
-    clearAllPdfBlobs().catch(()=>{});
+    try { await resetAllPolicies(); }
+    catch (err) { console.error("Couldn't reset policies on the server", err); }
   };
 
   const relevantDocs = currentScenario
@@ -413,36 +438,48 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     }
   }, [docMatchIndex, docSearch, viewDoc]);
 
-  // Loads the stored PDF bytes for the open document and hands them to the
+  // Fetches the open document's full content (text + PDF bytes) from the
+  // server — the policies list only carries light metadata, so this runs
+  // once per doc switch. For a PDF, the bytes are then handed to the
   // browser's own PDF reader via an object URL, instead of redrawing pages
-  // onto a canvas ourselves — simpler, and it's what actually gives the
-  // native document look. pdf.js is still used here, but only to read the
-  // page count for the Prev/Next controls below.
+  // onto a canvas ourselves. pdf.js is still used here, but only to read
+  // the page count for the Prev/Next controls below. Keyed on the doc id
+  // (not the object) so merging the fetched content back into viewDoc below
+  // doesn't re-trigger this effect.
   useEffect(() => {
     let cancelled = false;
     let url = null;
     setPdfNumPages(0);
     setPdfPage(1);
     setPdfObjectUrl(null);
-    if (!viewDoc || !viewDoc.hasPdf) { setPdfLoadState("idle"); return; }
+    if (!viewDoc) { setPdfLoadState("idle"); return; }
     setPdfLoadState("loading");
+    const docId = viewDoc.id;
+    const wantsPdf = viewDoc.hasPdf;
     (async () => {
       try {
-        const buf = await loadPdfBlob(viewDoc.id);
-        if (!buf) throw new Error("no stored PDF for this document");
-        const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+        const full = await fetchPolicyContent(docId);
         if (cancelled) return;
-        url = URL.createObjectURL(new Blob([buf], { type: "application/pdf" }));
-        setPdfNumPages(pdf.numPages);
-        setPdfObjectUrl(url);
+        setViewDoc(prev => prev && prev.id === docId ? { ...prev, text: full.text, pageTexts: full.pageTexts } : prev);
+        if (wantsPdf) {
+          if (!full.pdfBase64) throw new Error("no stored PDF for this document");
+          const bin = atob(full.pdfBase64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+          if (cancelled) return;
+          url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+          setPdfNumPages(pdf.numPages);
+          setPdfObjectUrl(url);
+        }
         setPdfLoadState("ready");
       } catch (err) {
-        console.error("Couldn't load stored PDF pages for", viewDoc && viewDoc.name, err);
+        console.error("Couldn't load document content for", viewDoc && viewDoc.name, err);
         if (!cancelled) setPdfLoadState("error");
       }
     })();
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
-  }, [viewDoc]);
+  }, [viewDoc?.id]);
 
   return (
     <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -452,7 +489,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
           <div>
             <div style={{ fontSize:"1rem", fontWeight:700 }}>Company Policies</div>
             <div style={{ fontSize:"0.78rem", color:"var(--pac-text-muted)", marginTop:2 }}>
-              {policies.length===0 ? "No documents on file" : `${policies.length} document${policies.length!==1?"s":""} stored in this browser`}
+              {policies.length===0 ? "No documents on file" : `${policies.length} document${policies.length!==1?"s":""} on file — shared across all devices`}
             </div>
           </div>
           <button onClick={onClose} style={s.btn(false)}>Close</button>
@@ -556,6 +593,8 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                         </div>
                       )}
                     </div>
+                  ) : pdfLoadState==="loading" ? (
+                    <div style={{ textAlign:"center", padding:"48px 0", color:"var(--pac-text-muted)", fontSize:"0.82rem" }}>Loading…</div>
                   ) : (
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
@@ -565,12 +604,12 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                           value={docSearch}
                           onChange={e=>{ setDocSearch(e.target.value); setDocMatchIndex(0); }}
                           onKeyDown={e=>{
-                            const total = countDocMatches(viewDoc.text, docSearch);
+                            const total = countDocMatches(viewDoc.text||"", docSearch);
                             if (e.key==="Enter" && total>0) setDocMatchIndex(i => e.shiftKey ? (i-1+total)%total : (i+1)%total);
                           }}
                         />
                         {docSearch.trim() && (() => {
-                          const total = countDocMatches(viewDoc.text, docSearch);
+                          const total = countDocMatches(viewDoc.text||"", docSearch);
                           return (
                             <>
                               <span style={{ fontSize:"0.75rem", color:"var(--pac-text-muted)", whiteSpace:"nowrap" }}>{total ? `${docMatchIndex+1} of ${total}` : "No matches"}</span>
@@ -581,7 +620,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                         })()}
                       </div>
                       <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"14px 16px", maxHeight:360, overflowY:"auto", fontSize:"0.8rem", lineHeight:1.65, color:"var(--pac-text-70)", wordBreak:"break-word" }}>
-                        {renderDocLines(viewDoc.text, docSearch, docMatchIndex, docMatchRefs)}
+                        {renderDocLines(viewDoc.text||"", docSearch, docMatchIndex, docMatchRefs)}
                       </div>
                     </div>
                   )}
@@ -624,7 +663,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                             <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>{(doc.chars/1000).toFixed(1)}k chars · {doc.addedAt}</span>
                           </div>
                           <div style={{ fontSize:"0.76rem", color:"var(--pac-text-60)", marginTop:5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                            {doc.text.substring(0,120).replace(/\s+/g," ")}...
+                            {(doc.preview||"").replace(/\s+/g," ")}...
                           </div>
                         </div>
                         <div style={{ display:"flex", gap:5, flexShrink:0 }}>
@@ -644,7 +683,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
             !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
               <div>
                 <div style={{ fontSize:"0.82rem", color:"var(--pac-text-65)", lineHeight:1.6, marginBottom:14 }}>
-                  Upload policy documents, handbook sections, or any HR reference material. Supported: .txt, .pdf, .doc, .docx, .md up to 5MB. Files stay in this browser only.
+                  Upload policy documents, handbook sections, or any HR reference material. Supported: .txt, .pdf, .doc, .docx, .md up to 5MB. Saved to the company's shared library — visible from any device.
                 </div>
                 <div
                   style={{ border:`2px dashed ${dragActive?"rgba(34,193,255,0.6)":"rgba(255,255,255,0.12)"}`, background:dragActive?"var(--pac-accent-surface-2)":"var(--pac-surface-2)", borderRadius:12, padding:"32px 24px", textAlign:"center", cursor:"pointer", transition:"all .15s", marginBottom:14 }}
@@ -910,8 +949,9 @@ function App() {
   const [teamsWebhook, setTeamsWebhook]     = useState("");
 
   useEffect(() => {
-    setPolicies(loadPolicies()); setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
+    fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
@@ -1581,7 +1621,7 @@ function App() {
 
         <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"var(--pac-text-muted)", lineHeight:1.8 }}>
           General guidance only — not legal advice.<br />
-          Your progress and company policies save automatically to this browser.<br />
+          Your progress saves automatically to this browser. Company policies are shared across every device.<br />
           © 2026 Melissa A. Weiss. All rights reserved.
         </div>
       </div>
