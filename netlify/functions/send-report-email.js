@@ -33,7 +33,7 @@ exports.handler = async function (event) {
   }
 
   const payload = {
-    sender: { name: "HR Action Check", email: senderEmail },
+    sender: { name: "People Action Check", email: senderEmail },
     to: [{ email: to }],
     subject,
     textContent: text,
