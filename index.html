@@ -30,5 +30,23 @@
 <script src="src/web/app-data.js"></script>
 <script src="src/web/app-utils.js"></script>
 <script type="text/babel" src="src/web/App.jsx"></script>
+<script>
+  // No build step means an already-open tab never re-fetches this file on its own.
+  // Poll the page's own ETag and reload automatically when a new deploy changes it,
+  // so people don't have to know to manually refresh after we ship an update.
+  (function () {
+    var knownEtag = null;
+    function checkForUpdate() {
+      fetch("/index.html", { method: "HEAD", cache: "no-store" }).then(function (res) {
+        var etag = res.headers.get("etag");
+        if (!etag) return;
+        if (knownEtag === null) { knownEtag = etag; return; }
+        if (etag !== knownEtag) { window.location.reload(); }
+      }).catch(function () {});
+    }
+    checkForUpdate();
+    setInterval(checkForUpdate, 60000);
+  })();
+</script>
 </body>
 </html>
