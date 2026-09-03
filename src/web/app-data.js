@@ -5,7 +5,7 @@
 // ── Storage keys ──────────────────────────────────────────────────────────
 var SAVE_KEY           = "hr_check_session_v3";
 var PIN_KEY            = "hr_check_pin_v3";
-var HISTORY_KEY        = "hr_check_history_v1";
+var IDENTITY_KEY       = "hr_check_identity_v1";
 var HR_EMAIL_KEY       = "hr_check_hr_email_v1";
 var HR_FOLLOWUPS_KEY   = "hr_check_followups_v1";
 var SLACK_WEBHOOK_KEY  = "hr_check_webhook_slack_v1";

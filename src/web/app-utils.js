@@ -61,9 +61,46 @@ async function resetAllPolicies() {
   if (!res.ok) throw new Error("reset failed");
 }
 
-// ── Check history ─────────────────────────────────────────────────────────
-function loadCheckHistory(){ try { var d=localStorage.getItem(HISTORY_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
-function saveCheckHistory(d){ try { localStorage.setItem(HISTORY_KEY, JSON.stringify(d)); } catch(e) {} }
+// ── Check history (server-synced — private per manager, filtered by their
+// verified Google email; see netlify/functions/check-history-store.js) ────
+async function fetchCheckHistory(email) {
+  var res = await fetch("/api/check-history-store" + (email ? "?email=" + encodeURIComponent(email) : ""));
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.history || [];
+}
+async function createCheckHistoryEntry(entry) {
+  var res = await fetch("/api/check-history-store", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
+}
+async function deleteCheckHistoryEntry(id) {
+  var res = await fetch("/api/check-history-store?id=" + encodeURIComponent(id), { method: "DELETE" });
+  if (!res.ok) throw new Error("delete failed");
+}
+async function clearCheckHistory(email) {
+  var res = await fetch("/api/check-history-store" + (email ? "?email=" + encodeURIComponent(email) : ""), { method: "DELETE" });
+  if (!res.ok) throw new Error("clear failed");
+}
+
+// ── Identity (Sign in with Google) ──────────────────────────────────────
+function loadIdentity()    { try { var d=localStorage.getItem(IDENTITY_KEY); return d?JSON.parse(d):null; } catch(e){return null;} }
+function saveIdentity(v)   { try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(v)); } catch(e) {} }
+function clearIdentity()   { try { localStorage.removeItem(IDENTITY_KEY); } catch(e) {} }
+
+async function verifyGoogleCredential(credential) {
+  var res = await fetch("/api/verify-google-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential: credential }),
+  });
+  if (!res.ok) throw new Error("verification failed");
+  return res.json();
+}
 
 // ── PIN ───────────────────────────────────────────────────────────────────
 function loadPinHash()      { try { return localStorage.getItem(PIN_KEY) || DEFAULT_PIN_HASH; } catch(e){return DEFAULT_PIN_HASH;} }

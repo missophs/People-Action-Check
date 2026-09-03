@@ -6,6 +6,8 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
 
+const GOOGLE_CLIENT_ID = "457583731351-di8h6sl5hjpv5ek5daog5l6muqn2o9v5.apps.googleusercontent.com";
+
 // ── Inline SVG icon system ────────────────────────────────────────────────
 const ICONS = {
   lock:          `<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
@@ -136,9 +138,12 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
   const [teamsSaved, setTeamsSaved]       = useState(false);
   const [hrSubmissions, setHrSubmissions] = useState([]);
   const [viewingSub, setViewingSub]       = useState(null);
+  const [allChecks, setAllChecks]         = useState([]);
+  const [viewingCheck, setViewingCheck]   = useState(null);
   const fileRef = useRef(null);
 
   useEffect(() => { fetchHrSubmissions().then(setHrSubmissions).catch(err => console.error("Couldn't load HR submissions", err)); }, []);
+  useEffect(() => { fetchCheckHistory().then(setAllChecks).catch(err => console.error("Couldn't load all checks", err)); }, []);
 
   const readPdf = (file) => new Promise((resolve) => {
     const reader = new FileReader();
@@ -510,6 +515,9 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
           </button>
           <button style={s.tab(tab==="dashboard")} onClick={()=>{ setTab("dashboard"); setViewingSub(null); }}>
             HR Dashboard {lockBadge}{hrSubmissions.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{hrSubmissions.length}</span>}
+          </button>
+          <button style={s.tab(tab==="allChecks")} onClick={()=>{ setTab("allChecks"); setViewingCheck(null); }}>
+            All Checks {lockBadge}{allChecks.length>0&&<span style={{ marginLeft:4, fontSize:"0.68rem", background:"rgba(255,255,255,0.1)", padding:"1px 5px", borderRadius:99 }}>{allChecks.length}</span>}
           </button>
         </div>
 
@@ -883,6 +891,27 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
             )
           )}
 
+          {/* ALL CHECKS TAB — HR-only, read-only, unfiltered across all managers */}
+          {tab==="allChecks" && (
+            !unlocked ? <PinGate onUnlock={()=>setUnlocked(true)} /> : (
+              <div>
+                {allChecks.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"32px 0", color:"var(--pac-text-muted)" }}>
+                    <div style={{ marginBottom:12, display:"flex", justifyContent:"center" }}><Icon name="history" size={40} color="var(--pac-text-dim)" /></div>
+                    <div style={{ fontSize:"0.88rem" }}>No checks completed yet.</div>
+                    <div style={{ fontSize:"0.79rem", marginTop:6, color:"var(--pac-text-dim)" }}>Checks appear here once a signed-in manager completes one.</div>
+                  </div>
+                ) : viewingCheck ? (
+                  <CheckHistoryDetail entry={viewingCheck} onClose={()=>setViewingCheck(null)} />
+                ) : (
+                  allChecks.map(entry => (
+                    <CheckHistoryRow key={entry.id} entry={entry} showOwner onClick={()=>setViewingCheck(entry)} />
+                  ))
+                )}
+              </div>
+            )
+          )}
+
         </div>
       </div>
     </div>
@@ -921,6 +950,73 @@ function PolicyHint({ policies, scenario }) {
   );
 }
 
+// ── Check history row/detail — shared between a manager's own Session
+// History and HR's read-only "All Checks" view ────────────────────────────
+function CheckHistoryRow({ entry, onClick, onDelete, showOwner }) {
+  const col = C[entry.level];
+  const labels = { good:"Low Risk", warn:"Elevated Risk", risk:"High Risk" };
+  return (
+    <div onClick={onClick} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
+        <div>
+          <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[entry.scenario].icon} {entry.scenario}</div>
+          <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>
+            {entry.employeeName ? <span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{entry.employeeName} ·</span> : null}
+            {showOwner && entry.ownerEmail ? <span style={{ marginRight:6 }}>{entry.ownerEmail} ·</span> : null}
+            {entry.date} · {entry.time}
+          </div>
+        </div>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", background:col.bg, color:col.text, border:`1px solid ${col.border}`, whiteSpace:"nowrap" }}>{labels[entry.level]}</span>
+        <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>View →</span>
+        {onDelete && <button onClick={ev=>{ ev.stopPropagation(); onDelete(); }} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--pac-risk)", fontSize:"0.85rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit" }} title="Delete">×</button>}
+      </div>
+    </div>
+  );
+}
+
+function CheckHistoryDetail({ entry, onClose }) {
+  const eqs = QS[entry.scenario];
+  const col = C[entry.level];
+  const st2 = STEPS[entry.scenario][entry.level];
+  const labels = { good:"Low Risk", warn:"Elevated Risk", risk:"High Risk" };
+  return (
+    <div style={{ background:"var(--pac-surface-2)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:14, padding:"16px 18px", marginBottom:8 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div>
+          <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{META[entry.scenario].icon} {entry.scenario}</div>
+          {entry.employeeName && <div style={{ fontSize:"0.8rem", color:"var(--pac-accent)", fontWeight:600, marginTop:2 }}>{entry.employeeName}</div>}
+          {entry.ownerEmail && <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{entry.ownerName ? `${entry.ownerName} · ` : ""}{entry.ownerEmail}</div>}
+          <div style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)", marginTop:2 }}>{entry.date} at {entry.time}</div>
+        </div>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[entry.level]}</span>
+          <button style={{ padding:"8px 16px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-border-3)", background:"var(--pac-surface-1)", color:"var(--pac-text)", cursor:"pointer", fontSize:"var(--pac-text-md)", fontWeight:600, fontFamily:"var(--pac-font)" }} onClick={onClose}>Close</button>
+        </div>
+      </div>
+      {eqs.map((item,i)=>{ const a=entry.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"var(--pac-good)":a==="no"?"var(--pac-risk)":"var(--pac-warn)";
+        return (
+          <div key={i} style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:9, marginTop:9 }}>
+            <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"var(--pac-text-70)", marginBottom:4 }}>{item.q}</div>
+            <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
+            {entry.notes[i] && <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:3, fontStyle:"italic" }}>{entry.notes[i]}</div>}
+          </div>
+        );
+      })}
+      <div style={{ marginTop:14, borderTop:"1px solid var(--pac-border-0)", paddingTop:12 }}>
+        <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:8 }}>Next steps from that check</div>
+        {st2.map((st,i)=>(
+          <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:5 }}>
+            <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────
 function App() {
   const [step, setStep]               = useState("pick");
@@ -941,6 +1037,9 @@ function App() {
   const [checkHistory, setCheckHistory]     = useState([]);
   const [viewingPast, setViewingPast]       = useState(null);
   const [showHistory, setShowHistory]       = useState(false);
+  const [identity, setIdentity]             = useState(() => loadIdentity());
+  const [identityError, setIdentityError]   = useState("");
+  const googleBtnRef                        = useRef(null);
   const [employeeName, setEmployeeName]     = useState("");
   const [hrEmail, setHrEmail]               = useState("");
   const [hrEmailStatus, setHrEmailStatus]   = useState("idle");
@@ -952,12 +1051,43 @@ function App() {
   const [teamsWebhook, setTeamsWebhook]     = useState("");
 
   useEffect(() => {
-    setCheckHistory(loadCheckHistory()); setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
+
+  // Session History is per-manager, filtered to their verified Google identity.
+  useEffect(() => {
+    if (!identity) { setCheckHistory([]); return; }
+    fetchCheckHistory(identity.email).then(setCheckHistory).catch(err => console.error("Couldn't load check history", err));
+  }, [identity]);
+
+  const handleGoogleCredential = async (response) => {
+    try {
+      const { email, name } = await verifyGoogleCredential(response.credential);
+      saveIdentity({ email, name }); setIdentity({ email, name }); setIdentityError("");
+    } catch (e) { setIdentityError("Sign-in failed. Please try again."); }
+  };
+  const signOut = () => { clearIdentity(); setIdentity(null); setCheckHistory([]); setShowHistory(false); setViewingPast(null); };
+
+  // GSI script loads async/defer — poll briefly for window.google to exist.
+  useEffect(() => {
+    if (identity) return;
+    let cancelled = false;
+    const tryInit = () => {
+      if (cancelled) return;
+      if (window.google && window.google.accounts && googleBtnRef.current) {
+        window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
+        window.google.accounts.id.renderButton(googleBtnRef.current, { theme: "outline", size: "medium" });
+      } else {
+        setTimeout(tryInit, 200);
+      }
+    };
+    tryInit();
+    return () => { cancelled = true; };
+  }, [identity]);
 
   const resumeSession = () => {
     if (!savedSession) return;
@@ -1141,8 +1271,11 @@ function App() {
     if(next.every(a=>a!==null)){
       const{level}=computeScore(qs,next);
       setHistory(h=>[{scenario,level,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...h]);
-      const entry={ id:Date.now(), scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim() };
-      setCheckHistory(h=>{ const updated=[entry,...h].slice(0,10); saveCheckHistory(updated); return updated; });
+      // Signing in is only required to use Session History, not the check tool itself.
+      if (identity) {
+        const entry={ scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim(), ownerEmail:identity.email, ownerName:identity.name };
+        createCheckHistoryEntry(entry).then(saved => setCheckHistory(h=>[saved,...h])).catch(err => console.error("Couldn't save check history", err));
+      }
       clearSession();
       setStep("result");
     }
@@ -1191,7 +1324,7 @@ function App() {
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:"1.25rem", fontWeight:700 }}>People Action Check</div>
-              <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"var(--pac-text-muted)", marginTop:3 }}>A private confidence check for people-management decisions. Completed checks save to this browser — email yourself to keep a permanent record.</div>
+              <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"var(--pac-text-muted)", marginTop:3 }}>A private confidence check for people-management decisions. Sign in to sync your check history across devices.</div>
             </div>
             <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"var(--pac-accent-border-alt)",color:"var(--pac-accent)",background:"var(--pac-accent-surface)"}:{}) }}>
               <Icon name="folder" size={14} />
@@ -1234,85 +1367,52 @@ function App() {
         {/* Session History Box */}
         {step==="pick" && (
           <div style={{ marginBottom:18 }}>
-            <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <Icon name="history" size={20} color="var(--pac-text)" />
-                <div>
+            {!identity ? (
+              <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <Icon name="history" size={20} color="var(--pac-text)" />
                   <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
-                  <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
                 </div>
+                <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)", marginBottom:10 }}>Sign in with Google to view your check history.</div>
+                <div ref={googleBtnRef}></div>
+                {identityError && <div style={{ fontSize:"0.76rem", color:"var(--pac-risk)", marginTop:8 }}>{identityError}</div>}
               </div>
-              <span style={{ color:"var(--pac-text-muted)", fontSize:"0.85rem", flexShrink:0 }}>{showHistory?"▲":"▼"}</span>
-            </div>
-
-            {showHistory && (
-              <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
-                {checkHistory.length===0 ? (
-                  <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
-                ) : (
-                  <div>
-                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ saveCheckHistory([]); setCheckHistory([]); setViewingPast(null); }}>Clear all</button>
-                    </div>
-                    {viewingPast!==null && checkHistory[viewingPast] ? (()=>{
-              const e=checkHistory[viewingPast];
-              const eqs=QS[e.scenario]; const col=C[e.level];
-              const st2=STEPS[e.scenario][e.level];
-              const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
-              return (
-                <div style={{ background:"var(--pac-surface-2)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:14, padding:"16px 18px", marginBottom:8 }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            ) : (
+              <div>
+                <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <Icon name="history" size={20} color="var(--pac-text)" />
                     <div>
-                      <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{META[e.scenario].icon} {e.scenario}</div>
-                      {e.employeeName && <div style={{ fontSize:"0.8rem", color:"var(--pac-accent)", fontWeight:600, marginTop:2 }}>{e.employeeName}</div>}
-                      <div style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)", marginTop:2 }}>{e.date} at {e.time}</div>
-                    </div>
-                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"3px 8px", borderRadius:5, background:col.bg, color:col.text, border:`1px solid ${col.border}` }}>{labels[e.level]}</span>
-                      <button style={s.btn(false)} onClick={()=>setViewingPast(null)}>Close</button>
+                      <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
+                      <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
                     </div>
                   </div>
-                  {eqs.map((item,i)=>{ const a=e.answers[i]; const aLabel=a==="yes"?"Yes":a==="no"?"No":"Don't know"; const aColor=a==="yes"?"var(--pac-good)":a==="no"?"var(--pac-risk)":"var(--pac-warn)";
-                    return (
-                      <div key={i} style={{ borderTop:"1px solid var(--pac-border-0)", paddingTop:9, marginTop:9 }}>
-                        <div style={{ fontSize:"0.82rem", lineHeight:1.45, color:"var(--pac-text-70)", marginBottom:4 }}>{item.q}</div>
-                        <div style={{ fontSize:"0.78rem", fontWeight:700, color:aColor }}>{aLabel}</div>
-                        {e.notes[i] && <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:3, fontStyle:"italic" }}>{e.notes[i]}</div>}
-                      </div>
-                    );
-                  })}
-                  <div style={{ marginTop:14, borderTop:"1px solid var(--pac-border-0)", paddingTop:12 }}>
-                    <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:8 }}>Next steps from that check</div>
-                    {st2.map((st,i)=>(
-                      <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:5 }}>
-                        <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <span style={{ color:"var(--pac-text-muted)", fontSize:"0.85rem", flexShrink:0 }}>{showHistory?"▲":"▼"}</span>
                 </div>
-              );
-            })() : (
-              checkHistory.map((e,i)=>{ const col=C[e.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
-                return (
-                  <div key={e.id} onClick={()=>setViewingPast(i)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                      <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
+
+                {showHistory && (
+                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
+                    {checkHistory.length===0 ? (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
+                    ) : (
                       <div>
-                        <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[e.scenario].icon} {e.scenario}</div>
-                        <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{e.employeeName ? <span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{e.employeeName} ·</span> : null}{e.date} · {e.time}</div>
+                        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                          <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
+                        </div>
+                        {viewingPast!==null && checkHistory[viewingPast] ? (
+                          <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
+                        ) : (
+                          checkHistory.map((e,i)=>(
+                            <CheckHistoryRow key={e.id} entry={e} onClick={()=>setViewingPast(i)} onDelete={()=>{ const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); deleteCheckHistoryEntry(e.id).catch(err => console.error("Couldn't delete check history entry", err)); }} />
+                          ))
+                        )}
                       </div>
-                    </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <span style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", background:col.bg, color:col.text, border:`1px solid ${col.border}`, whiteSpace:"nowrap" }}>{labels[e.level]}</span>
-                      <span style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>View →</span>
-                      <button onClick={ev=>{ ev.stopPropagation(); const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); saveCheckHistory(updated); }} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--pac-risk)", fontSize:"0.85rem", padding:"2px 4px", lineHeight:1, fontFamily:"inherit" }} title="Delete">×</button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                    )}
                   </div>
                 )}
+                <div style={{ textAlign:"right", marginTop:6 }}>
+                  <button style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={signOut}>Signed in as {identity.email} · Sign out</button>
+                </div>
               </div>
             )}
           </div>
