@@ -31,18 +31,22 @@
 <script src="src/web/app-utils.js"></script>
 <script type="text/babel" src="src/web/App.jsx"></script>
 <script>
-  // No build step means an already-open tab never re-fetches this file on its own.
-  // Poll the page's own ETag and reload automatically when a new deploy changes it,
-  // so people don't have to know to manually refresh after we ship an update.
+  // No build step means an already-open tab never re-fetches these files on its own.
+  // Poll each file's own ETag and reload automatically the moment any of them changes
+  // in a new deploy, so people don't have to know to manually refresh after we ship one.
   (function () {
-    var knownEtag = null;
+    var WATCHED_FILES = ["/index.html", "/src/web/App.jsx", "/src/web/app-utils.js", "/src/web/app-data.js", "/src/design-system/tokens.css"];
+    var knownEtags = null;
     function checkForUpdate() {
-      fetch("/index.html", { method: "HEAD", cache: "no-store" }).then(function (res) {
-        var etag = res.headers.get("etag");
-        if (!etag) return;
-        if (knownEtag === null) { knownEtag = etag; return; }
-        if (etag !== knownEtag) { window.location.reload(); }
-      }).catch(function () {});
+      Promise.all(WATCHED_FILES.map(function (path) {
+        return fetch(path, { method: "HEAD", cache: "no-store" }).then(function (res) {
+          return res.headers.get("etag");
+        }).catch(function () { return null; });
+      })).then(function (etags) {
+        if (knownEtags === null) { knownEtags = etags; return; }
+        var changed = etags.some(function (etag, i) { return etag && knownEtags[i] && etag !== knownEtags[i]; });
+        if (changed) { window.location.reload(); }
+      });
     }
     checkForUpdate();
     setInterval(checkForUpdate, 60000);
