@@ -1024,7 +1024,6 @@ function App() {
   const [answers, setAnswers]         = useState([]);
   const [notes, setNotes]             = useState([]);
   const [hints, setHints]             = useState([]);
-  const [history, setHistory]         = useState([]);
   const [copied, setCopied]           = useState(false);
   const [showDocTips, setShowDocTips] = useState(false);
   const [savedSession, setSavedSession]     = useState(null);
@@ -1036,7 +1035,6 @@ function App() {
   const [emailStatus, setEmailStatus]       = useState("idle");
   const [checkHistory, setCheckHistory]     = useState([]);
   const [viewingPast, setViewingPast]       = useState(null);
-  const [showHistory, setShowHistory]       = useState(false);
   const [identity, setIdentity]             = useState(() => loadIdentity());
   const [identityError, setIdentityError]   = useState("");
   const googleBtnRef                        = useRef(null);
@@ -1056,7 +1054,7 @@ function App() {
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
-  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes,history}); }, [step,scenario,answers,notes,history]);
+  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes}); }, [step,scenario,answers,notes]);
 
   // Session History is per-manager, filtered to their verified Google identity.
   useEffect(() => {
@@ -1070,7 +1068,7 @@ function App() {
       saveIdentity({ email, name }); setIdentity({ email, name }); setIdentityError("");
     } catch (e) { setIdentityError("Sign-in failed. Please try again."); }
   };
-  const signOut = () => { clearIdentity(); setIdentity(null); setCheckHistory([]); setShowHistory(false); setViewingPast(null); };
+  const signOut = () => { clearIdentity(); setIdentity(null); setCheckHistory([]); setViewingPast(null); };
 
   // GSI script loads async/defer — poll briefly for window.google to exist.
   useEffect(() => {
@@ -1095,7 +1093,7 @@ function App() {
     setScenario(savedSession.scenario); setStep(savedSession.step);
     setAnswers(savedSession.answers&&savedSession.answers.length===n?savedSession.answers:new Array(n).fill(null));
     setNotes(savedSession.notes&&savedSession.notes.length===n?savedSession.notes:new Array(n).fill(""));
-    setHints(new Array(n).fill(false)); setHistory(savedSession.history||[]);
+    setHints(new Array(n).fill(false));
     setShowResume(false); setSavedSession(null);
   };
   const dismissResume = () => { setShowResume(false); setSavedSession(null); clearSession(); };
@@ -1186,8 +1184,9 @@ function App() {
   };
   const removeAttachment = (idx) => setAttachments(prev => prev.filter((_,i)=>i!==idx));
 
-  const sendEmail = async () => {
-    if (!sc || !emailAddr.includes("@")) return;
+  const sendEmail = async (recipient) => {
+    const to = recipient || emailAddr;
+    if (!sc || !to.includes("@")) return;
     setEmailStatus("sending");
     try {
       const reportBase64 = await buildReportDocxBase64();
@@ -1198,7 +1197,7 @@ function App() {
       ];
       const res = await fetch("/api/send-report-email", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ to:emailAddr, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
+        body: JSON.stringify({ to, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
       });
       if (!res.ok) throw new Error("send failed");
       setEmailStatus("sent");
@@ -1264,14 +1263,17 @@ function App() {
     } catch(e) { setHrEmailStatus("error"); }
   };
 
+  // Sign-in is required to use the tool, so results always have a real address to send to.
+  useEffect(() => {
+    if (step==="result" && identity && emailStatus==="idle") { sendEmail(identity.email); }
+  }, [step, identity]);
+
   const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
   const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
   const ans   = (idx,val) => {
     const next=[...answers]; next[idx]=val; setAnswers(next);
     if(next.every(a=>a!==null)){
       const{level}=computeScore(qs,next);
-      setHistory(h=>[{scenario,level,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...h]);
-      // Signing in is only required to use Session History, not the check tool itself.
       if (identity) {
         const entry={ scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim(), ownerEmail:identity.email, ownerName:identity.name };
         createCheckHistoryEntry(entry).then(saved => setCheckHistory(h=>[saved,...h])).catch(err => console.error("Couldn't save check history", err));
@@ -1333,6 +1335,17 @@ function App() {
           </div>
         </div>
 
+        {!identity ? (
+          <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"22px 18px", textAlign:"center" }}>
+            <Icon name="history" size={22} color="var(--pac-text)" />
+            <div style={{ fontWeight:700, fontSize:"0.95rem", marginTop:8 }}>Sign in to use People Action Check</div>
+            <div style={{ fontSize:"0.8rem", color:"var(--pac-text-muted)", marginTop:6, marginBottom:14 }}>Your checks are tied to your account so you can always find your history, and results are emailed to you automatically.</div>
+            <div ref={googleBtnRef} style={{ display:"flex", justifyContent:"center" }}></div>
+            {identityError && <div style={{ fontSize:"0.76rem", color:"var(--pac-risk)", marginTop:10 }}>{identityError}</div>}
+          </div>
+        ) : (
+        <>
+
         {/* Resume banner */}
         {showResumeBanner && savedSession && (
           <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
@@ -1364,57 +1377,37 @@ function App() {
           })}
         </div>
 
-        {/* Session History Box */}
+        {/* Session History Box — identity is guaranteed here, sign-in gates the whole app now */}
         {step==="pick" && (
           <div style={{ marginBottom:18 }}>
-            {!identity ? (
-              <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <Icon name="history" size={20} color="var(--pac-text)" />
+            <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:"12px 12px 0 0", padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <Icon name="history" size={20} color="var(--pac-text)" />
+                <div>
                   <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
-                </div>
-                <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)", marginBottom:10 }}>Sign in with Google to view your check history.</div>
-                <div ref={googleBtnRef}></div>
-                {identityError && <div style={{ fontSize:"0.76rem", color:"var(--pac-risk)", marginTop:8 }}>{identityError}</div>}
-              </div>
-            ) : (
-              <div>
-                <div onClick={()=>{ setShowHistory(v=>!v); setViewingPast(null); }} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, userSelect:"none" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <Icon name="history" size={20} color="var(--pac-text)" />
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
-                      <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""} — tap to view or delete`}</div>
-                    </div>
-                  </div>
-                  <span style={{ color:"var(--pac-text-muted)", fontSize:"0.85rem", flexShrink:0 }}>{showHistory?"▲":"▼"}</span>
-                </div>
-
-                {showHistory && (
-                  <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
-                    {checkHistory.length===0 ? (
-                      <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
-                    ) : (
-                      <div>
-                        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                          <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
-                        </div>
-                        {viewingPast!==null && checkHistory[viewingPast] ? (
-                          <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
-                        ) : (
-                          checkHistory.map((e,i)=>(
-                            <CheckHistoryRow key={e.id} entry={e} onClick={()=>setViewingPast(i)} onDelete={()=>{ const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); deleteCheckHistoryEntry(e.id).catch(err => console.error("Couldn't delete check history entry", err)); }} />
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div style={{ textAlign:"right", marginTop:6 }}>
-                  <button style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={signOut}>Signed in as {identity.email} · Sign out</button>
+                  <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""}`}</div>
                 </div>
               </div>
-            )}
+              <button style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0, flexShrink:0 }} onClick={signOut}>Signed in as {identity.email} · Sign out</button>
+            </div>
+            <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
+              {checkHistory.length===0 ? (
+                <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
+              ) : (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                    <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
+                  </div>
+                  {viewingPast!==null && checkHistory[viewingPast] ? (
+                    <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
+                  ) : (
+                    checkHistory.map((e,i)=>(
+                      <CheckHistoryRow key={e.id} entry={e} onClick={()=>setViewingPast(i)} onDelete={()=>{ const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); deleteCheckHistoryEntry(e.id).catch(err => console.error("Couldn't delete check history entry", err)); }} />
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1662,20 +1655,17 @@ function App() {
               {/* Combined send card */}
               <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
                 {/* Email to self */}
-                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Email this to yourself</div>
-                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to your inbox. Add notes and bring it to HR.</div>
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Emailed to you automatically</div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>. Add notes and bring it to HR.</div>
                 {emailStatus==="sent" ? (
                   <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
-                ) : (
+                ) : emailStatus==="error" ? (
                   <div>
-                    <div className="pac-email-row">
-                      <input type="email" className="email-input" placeholder="your@email.com" value={emailAddr} onChange={e=>{ setEmailAddr(e.target.value); setEmailStatus("idle"); }} aria-label="Your email address" style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"11px 14px", color:"var(--pac-text)", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
-                      <button style={{ ...s.btn(true), padding:"11px 20px", opacity:emailStatus==="sending"?0.6:1 }} onClick={sendEmail} disabled={emailStatus==="sending"||!emailAddr.includes("@")} aria-disabled={emailStatus==="sending"||!emailAddr.includes("@")}>
-                        {emailStatus==="sending"?"Sending...":"Send to my email"}
-                      </button>
-                    </div>
-                    {emailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)", marginTop:6 }}>Something went wrong. Try again or use Copy Summary above.</div>}
+                    <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to your inbox.</div>
+                    <button style={{ ...s.btn(false), marginTop:8 }} onClick={()=>sendEmail(identity && identity.email)}>Try again</button>
                   </div>
+                ) : (
+                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
                 )}
 
                 <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
@@ -1705,20 +1695,7 @@ function App() {
           );
         })()}
 
-        {/* Session history (in-page) */}
-        {history.length>0 && (
-          <div style={{ marginTop:24, borderTop:"1px solid var(--pac-border-1)", paddingTop:18 }}>
-            <span style={s.label}>Session history</span>
-            {history.map((e,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-1)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.82rem", marginBottom:6 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-                  <div style={{ width:7, height:7, borderRadius:"50%", background:C[e.level].text, flexShrink:0 }} />
-                  <div><div style={{ fontWeight:600 }}>{META[e.scenario].icon} {e.scenario}</div><div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)" }}>{e.time}</div></div>
-                </div>
-                <div style={{ fontSize:"0.65rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", background:C[e.level].bg, color:C[e.level].text }}>{e.level==="good"?"Low Risk":e.level==="warn"?"Elevated":"High Risk"}</div>
-              </div>
-            ))}
-          </div>
+        </>
         )}
 
         <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"var(--pac-text-muted)", lineHeight:1.8 }}>
