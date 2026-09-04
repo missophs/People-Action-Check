@@ -1487,10 +1487,10 @@ function App() {
 
         {/* Email nudge on pick screen */}
         {step==="pick" && (
-          <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
             <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
             <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>
-              When you finish your check, you can <strong style={{ color:"var(--pac-accent)" }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
+              When you finish your check, you can <strong style={{ color:"var(--pac-accent)", fontWeight:600 }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
             </div>
           </div>
         )}
