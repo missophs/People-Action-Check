@@ -8,6 +8,14 @@ const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
 
 const GOOGLE_CLIENT_ID = "457583731351-di8h6sl5hjpv5ek5daog5l6muqn2o9v5.apps.googleusercontent.com";
 
+// ── Multi-scenario helpers ───────────────────────────────────────────────
+// A check can span more than one situation type. Older records only ever
+// had a single `scenario` string — treat that as a one-item list so every
+// reader below works for both shapes.
+function entryScenarios(e) { return (e && e.scenarios && e.scenarios.length) ? e.scenarios : (e && e.scenario ? [e.scenario] : []); }
+function combinedQuestions(scenarioNames) { return scenarioNames.flatMap(name => (QS[name]||[]).map(q => ({ ...q, _scenario: name }))); }
+function scenarioIcons(names) { return names.map(n => (META[n]||{}).icon || "").join(" "); }
+
 // ── Inline SVG icon system ────────────────────────────────────────────────
 const ICONS = {
   lock:          `<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
@@ -110,7 +118,7 @@ function PinGate({ onUnlock, mode }) {
 }
 
 // ── Policy Library Modal ──────────────────────────────────────────────────
-function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook, unlocked, setUnlocked }) {
+function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEmail, onSaveHrEmail, slackWebhook, onSaveSlackWebhook, teamsWebhook, onSaveTeamsWebhook, unlocked, setUnlocked }) {
   const [tab, setTab]                     = useState("view");
   const [pasteText, setPasteText]         = useState("");
   const [pasteName, setPasteName]         = useState("");
@@ -349,8 +357,8 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
     catch (err) { console.error("Couldn't reset policies on the server", err); }
   };
 
-  const relevantDocs = currentScenario
-    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(currentScenario)||cat.id==="other"); })
+  const relevantDocs = currentScenarios && currentScenarios.length
+    ? policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(currentScenarios.some(name=>cat.scenarios.includes(name))||cat.id==="other"); })
     : policies;
 
   const s = {
@@ -647,14 +655,14 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                       <button style={{ ...s.btn(false), fontSize:"0.74rem" }} onClick={()=>setUnlockingInView(true)}>Unlock to remove or edit</button>
                     </div>
                   )}
-                  {currentScenario && relevantDocs.length>0 && relevantDocs.length<policies.length && (
+                  {currentScenarios && currentScenarios.length>0 && relevantDocs.length>0 && relevantDocs.length<policies.length && (
                     <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"9px 13px", fontSize:"0.79rem", color:"var(--pac-good)", marginBottom:14 }}>
-                      {relevantDocs.length} of {policies.length} documents are relevant to the current scenario.
+                      {relevantDocs.length} of {policies.length} documents are relevant to the current scenario{currentScenarios.length>1?"s":""}.
                     </div>
                   )}
                   {policies.map(doc=>{
                     const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category);
-                    const isRelevant=currentScenario&&relevantDocs.find(d=>d.id===doc.id);
+                    const isRelevant=currentScenarios&&currentScenarios.length>0&&relevantDocs.find(d=>d.id===doc.id);
                     return (
                       <div key={doc.id} style={{ background:isRelevant?"var(--pac-accent-surface-alt)":"var(--pac-surface-2)", border:`1px solid ${isRelevant?"var(--pac-accent-border-2)":"var(--pac-border-1)"}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"flex-start", gap:12 }}>
                         <div style={{ flex:1, minWidth:0 }}>
@@ -814,7 +822,8 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                 ) : viewingSub ? (()=>{
                   const sub = viewingSub;
                   const col = C[sub.level];
-                  const eqs = QS[sub.scenario];
+                  const subNames = entryScenarios(sub);
+                  const eqs = combinedQuestions(subNames);
                   const labels = {good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
                   const statusColors = {pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"};
                   const statusLabels = {pending:"Pending Review",reviewing:"In Review",resolved:"Resolved"};
@@ -829,7 +838,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                       <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:14, flexWrap:"wrap" }}>
                         <button style={{ padding:"7px 14px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-border-3)", background:"var(--pac-surface-1)", color:"var(--pac-text)", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, fontFamily:"inherit" }} onClick={()=>setViewingSub(null)}>Back</button>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                          <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{scenarioIcons(subNames)} {subNames.join(", ")}</div>
                           {sub.employeeName && <div style={{ fontSize:"0.79rem", color:"var(--pac-accent)", marginTop:2 }}>{sub.employeeName}</div>}
                           <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{sub.sentDate} at {sub.sentTime}</div>
                         </div>
@@ -870,11 +879,11 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
                     <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
                       <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ if(!window.confirm("Delete all HR submissions? This cannot be undone."))return; setHrSubmissions([]); clearHrSubmissions().catch(err => console.error("Couldn't clear HR submissions", err)); }}>Clear all</button>
                     </div>
-                    {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"};
+                    {hrSubmissions.map(sub=>{ const col=C[sub.level]; const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"}; const statusColors={pending:"var(--pac-warn)",reviewing:"var(--pac-accent)",resolved:"var(--pac-good)"}; const statusLabels={pending:"Pending",reviewing:"In Review",resolved:"Resolved"}; const subNames=entryScenarios(sub);
                       return (
                         <div key={sub.id} onClick={()=>setViewingSub(sub)} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
                           <div style={{ minWidth:0 }}>
-                            <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[sub.scenario].icon} {sub.scenario}</div>
+                            <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{scenarioIcons(subNames)} {subNames.join(", ")}</div>
                             <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{sub.employeeName?<span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{sub.employeeName} ·</span>:null}{sub.sentDate}</div>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
@@ -919,16 +928,16 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenario, hrEmai
 }
 
 // ── Contextual policy snippet during questions ────────────────────────────
-function PolicyHint({ policies, scenario }) {
+function PolicyHint({ policies, scenarios }) {
   const [expanded, setExpanded] = useState(false);
-  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
+  const relevant = policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&scenarios.some(name=>cat.scenarios.includes(name)); });
   if (relevant.length===0) return null;
   return (
     <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:10, padding:"10px 14px", marginBottom:14 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <Icon name="fileText" size={16} color="var(--pac-accent)" />
-          <span style={{ fontSize:"0.8rem", fontWeight:600, color:"var(--pac-accent)" }}>{relevant.length} company document{relevant.length!==1?"s":""} on file for this scenario</span>
+          <span style={{ fontSize:"0.8rem", fontWeight:600, color:"var(--pac-accent)" }}>{relevant.length} company document{relevant.length!==1?"s":""} on file for {scenarios.length>1?"these scenarios":"this scenario"}</span>
         </div>
         <button onClick={()=>setExpanded(v=>!v)} style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-65)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600 }}>
           {expanded?"Hide":"Show"}
@@ -955,12 +964,13 @@ function PolicyHint({ policies, scenario }) {
 function CheckHistoryRow({ entry, onClick, onDelete, showOwner }) {
   const col = C[entry.level];
   const labels = { good:"Low Risk", warn:"Elevated Risk", risk:"High Risk" };
+  const names = entryScenarios(entry);
   return (
     <div onClick={onClick} style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderRadius:10, padding:"11px 14px", marginBottom:7, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer" }}>
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <div style={{ width:7, height:7, borderRadius:"50%", background:col.text, flexShrink:0 }} />
         <div>
-          <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{META[entry.scenario].icon} {entry.scenario}</div>
+          <div style={{ fontWeight:600, fontSize:"0.85rem" }}>{scenarioIcons(names)} {names.join(", ")}</div>
           <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>
             {entry.employeeName ? <span style={{ color:"var(--pac-text-70)", marginRight:6 }}>{entry.employeeName} ·</span> : null}
             {showOwner && entry.ownerEmail ? <span style={{ marginRight:6 }}>{entry.ownerEmail} ·</span> : null}
@@ -978,15 +988,15 @@ function CheckHistoryRow({ entry, onClick, onDelete, showOwner }) {
 }
 
 function CheckHistoryDetail({ entry, onClose }) {
-  const eqs = QS[entry.scenario];
+  const names = entryScenarios(entry);
+  const eqs = combinedQuestions(names);
   const col = C[entry.level];
-  const st2 = STEPS[entry.scenario][entry.level];
   const labels = { good:"Low Risk", warn:"Elevated Risk", risk:"High Risk" };
   return (
     <div style={{ background:"var(--pac-surface-2)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:14, padding:"16px 18px", marginBottom:8 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
         <div>
-          <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{META[entry.scenario].icon} {entry.scenario}</div>
+          <div style={{ fontWeight:700, fontSize:"0.95rem" }}>{scenarioIcons(names)} {names.join(", ")}</div>
           {entry.employeeName && <div style={{ fontSize:"0.8rem", color:"var(--pac-accent)", fontWeight:600, marginTop:2 }}>{entry.employeeName}</div>}
           {entry.ownerEmail && <div style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", marginTop:1 }}>{entry.ownerName ? `${entry.ownerName} · ` : ""}{entry.ownerEmail}</div>}
           <div style={{ fontSize:"0.74rem", color:"var(--pac-text-muted)", marginTop:2 }}>{entry.date} at {entry.time}</div>
@@ -1007,9 +1017,14 @@ function CheckHistoryDetail({ entry, onClose }) {
       })}
       <div style={{ marginTop:14, borderTop:"1px solid var(--pac-border-0)", paddingTop:12 }}>
         <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:8 }}>Next steps from that check</div>
-        {st2.map((st,i)=>(
-          <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:5 }}>
-            <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
+        {names.map(name=>(
+          <div key={name} style={{ marginBottom:8 }}>
+            {names.length>1 && <div style={{ fontSize:"0.74rem", fontWeight:700, color:"var(--pac-text-70)", marginBottom:4 }}>{META[name].icon} {name}</div>}
+            {(STEPS[name][entry.level]||[]).map((st,i)=>(
+              <div key={i} style={{ display:"flex", gap:8, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:5 }}>
+                <span style={{ color:col.text, fontWeight:700, flexShrink:0 }}>{i+1}.</span><span>{st}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -1020,12 +1035,12 @@ function CheckHistoryDetail({ entry, onClose }) {
 // ── Main App ──────────────────────────────────────────────────────────────
 function App() {
   const [step, setStep]               = useState("pick");
-  const [scenario, setScenario]       = useState(null);
+  const [scenarios, setScenarios]     = useState([]);
   const [answers, setAnswers]         = useState([]);
   const [notes, setNotes]             = useState([]);
   const [hints, setHints]             = useState([]);
   const [copied, setCopied]           = useState(false);
-  const [showDocTips, setShowDocTips] = useState(false);
+  const [showDocTips, setShowDocTips] = useState({});
   const [savedSession, setSavedSession]     = useState(null);
   const [showResumeBanner, setShowResume]   = useState(false);
   const [policies, setPolicies]       = useState([]);
@@ -1053,8 +1068,8 @@ function App() {
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
-  useEffect(() => { const s=loadSession(); if(s&&s.scenario&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
-  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenario,answers,notes}); }, [step,scenario,answers,notes]);
+  useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
+  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
 
   // Session History is per-manager, filtered to their verified Google identity.
   useEffect(() => {
@@ -1089,8 +1104,9 @@ function App() {
 
   const resumeSession = () => {
     if (!savedSession) return;
-    const n=QS[savedSession.scenario].length;
-    setScenario(savedSession.scenario); setStep(savedSession.step);
+    const resumedScenarios = entryScenarios(savedSession);
+    const n=combinedQuestions(resumedScenarios).length;
+    setScenarios(resumedScenarios); setStep(savedSession.step);
     setAnswers(savedSession.answers&&savedSession.answers.length===n?savedSession.answers:new Array(n).fill(null));
     setNotes(savedSession.notes&&savedSession.notes.length===n?savedSession.notes:new Array(n).fill(""));
     setHints(new Array(n).fill(false));
@@ -1098,8 +1114,7 @@ function App() {
   };
   const dismissResume = () => { setShowResume(false); setSavedSession(null); clearSession(); };
 
-  const m  = scenario ? META[scenario] : null;
-  const qs = scenario ? QS[scenario]   : [];
+  const qs = combinedQuestions(scenarios);
   const answered = answers.filter(a=>a!==null).length;
   const allDone  = qs.length>0 && answered===qs.length;
   const sc       = allDone ? computeScore(qs,answers) : null;
@@ -1107,11 +1122,15 @@ function App() {
 
   const buildReportLines = (forHR) => {
     const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines = [forHR?`People Action Check — Submitted for Review`:`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
-    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
-    const st2=STEPS[scenario][sc.level]; lines.push("---",forHR?"Recommended next steps:":"Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    const lines = [forHR?`People Action Check — Submitted for Review`:`People Action Check`,`${scenarios.length>1?"Scenarios":"Scenario"}: ${scenarios.join(", ")}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,employeeName.trim()?`Employee: ${employeeName.trim()}`:"",""].filter((l,i,a)=>!(l===""&&a[i-1]===""));
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}${scenarios.length>1?` (${item._scenario})`:""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    lines.push("---",forHR?"Recommended next steps:":"Next steps:");
+    scenarios.forEach(name=>{
+      if(scenarios.length>1) lines.push(`${META[name].icon} ${name}:`);
+      STEPS[name][sc.level].forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    });
     if(!forHR){
-      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
+      const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&scenarios.some(name=>cat.scenarios.includes(name)); });
       if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
     }
     if(attachments.length){ lines.push("","--- Attached files:"); attachments.forEach(f=>lines.push(`- ${f.name}`)); }
@@ -1123,7 +1142,7 @@ function App() {
     const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
     const children = [
       new Paragraph({ text: "People Action Check Report", heading: HeadingLevel.HEADING_1 }),
-      new Paragraph({ children: [new TextRun({ text: `Scenario: ${scenario}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `${scenarios.length>1?"Scenarios":"Scenario"}: ${scenarios.join(", ")}`, bold: true })] }),
       new Paragraph({ children: [new TextRun({ text: `Result: ${ll2}`, bold: true })] }),
       new Paragraph({ text: `Date: ${new Date().toLocaleDateString()}` }),
     ];
@@ -1132,13 +1151,16 @@ function App() {
     children.push(new Paragraph({ text: "Questions & Answers", heading: HeadingLevel.HEADING_2 }));
     qs.forEach((item,i)=>{
       const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know";
-      children.push(new Paragraph({ children:[new TextRun({ text:`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`, bold:true })] }));
+      children.push(new Paragraph({ children:[new TextRun({ text:`Q${i+1}${item.critical?" [Critical]":""}${scenarios.length>1?` (${item._scenario})`:""}: ${item.q}`, bold:true })] }));
       children.push(new Paragraph({ text:`Answer: ${label}` }));
       if (notes[i]) children.push(new Paragraph({ text:`Note: ${notes[i]}` }));
       children.push(new Paragraph({ text:"" }));
     });
     children.push(new Paragraph({ text: "Recommended Next Steps", heading: HeadingLevel.HEADING_2 }));
-    STEPS[scenario][sc.level].forEach((st,i)=> children.push(new Paragraph({ text:`${i+1}. ${st}` })));
+    scenarios.forEach(name=>{
+      if (scenarios.length>1) children.push(new Paragraph({ children:[new TextRun({ text:`${META[name].icon} ${name}`, bold:true })] }));
+      STEPS[name][sc.level].forEach((st,i)=> children.push(new Paragraph({ text:`${i+1}. ${st}` })));
+    });
     const imageAttachments = attachments.filter(f=>f.type && f.type.startsWith("image/"));
     const otherAttachments = attachments.filter(f=>!(f.type && f.type.startsWith("image/")));
     if (imageAttachments.length) {
@@ -1168,7 +1190,7 @@ function App() {
     const blob = new Blob([bytes], { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `People-Action-Check-${scenario.replace(/\s+/g,"-")}-${new Date().toISOString().slice(0,10)}.docx`;
+    a.href = url; a.download = `People-Action-Check-${scenarios.map(n=>n.replace(/\s+/g,"-")).join("_")}-${new Date().toISOString().slice(0,10)}.docx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -1192,12 +1214,12 @@ function App() {
       const reportBase64 = await buildReportDocxBase64();
       const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
       const fileAttachments = [
-        { filename: `People-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        { filename: `People-Action-Check-${scenarios.map(n=>n.replace(/\s+/g,"-")).join("_")}.docx`, base64Content: reportBase64 },
         ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
       ];
       const res = await fetch("/api/send-report-email", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ to, subject:`${scenario} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
+        body: JSON.stringify({ to, subject:`${scenarios.join(" + ")} — ${ll2}`, text:buildReportLines(false).join("\n"), attachments:fileAttachments })
       });
       if (!res.ok) throw new Error("send failed");
       setEmailStatus("sent");
@@ -1206,27 +1228,28 @@ function App() {
 
   const notifyWebhook = (webhookUrl, data) => {
     if (!webhookUrl) return;
+    const names = entryScenarios(data);
+    const scenarioLabel = names.join(", ");
     const ll2 = data.level==="good"?"Low Risk":data.level==="warn"?"Elevated Risk":"High Risk";
     const emoji = data.level==="good"?"🟢":data.level==="warn"?"🟡":"🔴";
     const themeColor = data.level==="good"?"38A169":data.level==="warn"?"D69E2E":"E53E3E";
-    const steps = STEPS[data.scenario][data.level];
-    const stepsText = steps.map((s,i)=>`${i+1}. ${s}`).join("\n");
+    const stepsText = names.map(name => (names.length>1?`${META[name].icon} ${name}:\n`:"")+STEPS[name][data.level].map((s,i)=>`${i+1}. ${s}`).join("\n")).join("\n\n");
     const isTeams = webhookUrl.includes("office.com") || webhookUrl.includes("webhook.office") || webhookUrl.includes("teams.microsoft");
     const payload = isTeams ? {
       "@type":"MessageCard", "@context":"https://schema.org/extensions",
-      "summary":`People Action Check — ${data.scenario} — ${ll2}`,
+      "summary":`People Action Check — ${scenarioLabel} — ${ll2}`,
       "themeColor":themeColor,
-      "title":`People Action Check — ${data.scenario}`,
+      "title":`People Action Check — ${scenarioLabel}`,
       "sections":[{ "facts":[
         {"name":"Result","value":`${emoji} ${ll2}`},
         ...(data.employeeName?[{"name":"Employee","value":data.employeeName}]:[]),
         {"name":"Date","value":data.sentDate},
-        {"name":"Scenario","value":data.scenario}
-      ], "text":`**Recommended next steps:**\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join("\n\n")}` }]
+        {"name":"Scenario","value":scenarioLabel}
+      ], "text":`**Recommended next steps:**\n\n${stepsText}` }]
     } : {
-      "text":`People Action Check — ${data.scenario} — ${ll2}`,
+      "text":`People Action Check — ${scenarioLabel} — ${ll2}`,
       "blocks":[
-        {"type":"header","text":{"type":"plain_text","text":`People Action Check — ${data.scenario}`,"emoji":true}},
+        {"type":"header","text":{"type":"plain_text","text":`People Action Check — ${scenarioLabel}`,"emoji":true}},
         {"type":"section","fields":[
           {"type":"mrkdwn","text":`*Result:*\n${emoji} ${ll2}`},
           ...(data.employeeName?[{"type":"mrkdwn","text":`*Employee:*\n${data.employeeName}`}]:[]),
@@ -1247,15 +1270,17 @@ function App() {
       const reportBase64 = await buildReportDocxBase64();
       const ll2 = sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
       const fileAttachments = [
-        { filename: `People-Action-Check-${scenario.replace(/\s+/g,"-")}.docx`, base64Content: reportBase64 },
+        { filename: `People-Action-Check-${scenarios.map(n=>n.replace(/\s+/g,"-")).join("_")}.docx`, base64Content: reportBase64 },
         ...attachments.map(f=>({ filename:f.name, base64Content:(f.dataUrl.split(",")[1]||"") }))
       ];
       const res = await fetch("/api/send-report-email", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ to:hrEmail, subject:`${scenario} — ${ll2} — People Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
+        body: JSON.stringify({ to:hrEmail, subject:`${scenarios.join(" + ")} — ${ll2} — People Action Check submitted`, text:buildReportLines(true).join("\n"), attachments:fileAttachments })
       });
       if (!res.ok) throw new Error("send failed");
-      const submission = { scenario, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
+      // `scenario` (first-selected) is kept for the server's required-field validation
+      // and for any code that hasn't been updated to read the full `scenarios` list.
+      const submission = { scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), sentDate:new Date().toLocaleDateString(), sentTime:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), answers:[...answers], notes:[...notes], status:"pending", hrNotes:"" };
       await createHrSubmission(submission);
       notifyWebhook(slackWebhook, submission);
       notifyWebhook(teamsWebhook, submission);
@@ -1263,29 +1288,34 @@ function App() {
     } catch(e) { setHrEmailStatus("error"); }
   };
 
-  // Sign-in is required to use the tool, so results always have a real address to send to.
-  // HR fires the same way, right alongside it, as long as an admin has configured an HR
-  // address — no separate click needed for either leg of "email employee + HR".
-  useEffect(() => {
-    if (step==="result" && identity && emailStatus==="idle") { sendEmail(identity.email); }
-    if (step==="result" && hrEmail.includes("@") && hrEmailStatus==="idle") { sendToHR(); }
-  }, [step, identity, hrEmail]);
+  // Sending is an explicit action on the result screen — one button fires both
+  // the employee copy (to the signed-in identity) and the HR copy (when an HR
+  // address is configured) at the same time.
+  const sendAll = () => {
+    if (identity) sendEmail(identity.email);
+    if (hrEmail.includes("@")) sendToHR();
+  };
 
-  const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
-  const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
+  // Toggles a card in/out of the selection while still on the picker.
+  const toggleScenario = (name) => { setScenarios(prev => prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name]); };
+  // Advances past the picker with whatever's currently selected.
+  const goToContext = () => { setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setShowResume(false); setAttachments([]); };
+  // Quick single-scenario switch, used when the grid is clicked outside the picker step.
+  const pick  = (name) => { setScenarios([name]); goToContext(); };
+  const start = () => { const n=qs.length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
   const ans   = (idx,val) => {
     const next=[...answers]; next[idx]=val; setAnswers(next);
     if(next.every(a=>a!==null)){
       const{level}=computeScore(qs,next);
       if (identity) {
-        const entry={ scenario, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim(), ownerEmail:identity.email, ownerName:identity.name };
+        const entry={ scenario:scenarios[0], scenarios, answers:next, notes, level, date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}), employeeName:employeeName.trim(), ownerEmail:identity.email, ownerName:identity.name };
         createCheckHistoryEntry(entry).then(saved => setCheckHistory(h=>[saved,...h])).catch(err => console.error("Couldn't save check history", err));
       }
       clearSession();
       setStep("result");
     }
   };
-  const startNew = () => { clearSession(); setScenario(null); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
+  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
 
   const ll = liveLevel();
   const liveColors = {neutral:"var(--pac-text-muted)",good:"var(--pac-good)",warn:"var(--pac-warn)",risk:"var(--pac-risk)"};
@@ -1306,10 +1336,14 @@ function App() {
   const copySum = () => {
     if (!sc) return;
     const ll2=sc.level==="good"?"Low Risk":sc.level==="warn"?"Elevated Risk":"High Risk";
-    const lines=[`People Action Check`,`Scenario: ${scenario}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
-    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
-    const st2=STEPS[scenario][sc.level]; lines.push("---","Next steps:"); st2.forEach((st,i)=>lines.push(`${i+1}. ${st}`));
-    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
+    const lines=[`People Action Check`,`${scenarios.length>1?"Scenarios":"Scenario"}: ${scenarios.join(", ")}`,`Result: ${ll2}`,`Date: ${new Date().toLocaleDateString()}`,""];
+    qs.forEach((item,i)=>{ const a=answers[i]; const label=a==="yes"?"Yes":a==="no"?"No":"Don't know"; lines.push(`Q${i+1}${item.critical?" [Critical]":""}${scenarios.length>1?` (${item._scenario})`:""}: ${item.q}`,`  Answer: ${label}`); if(notes[i])lines.push(`  Note: ${notes[i]}`); lines.push(""); });
+    lines.push("---","Next steps:");
+    scenarios.forEach(name=>{
+      if(scenarios.length>1) lines.push(`${META[name].icon} ${name}:`);
+      STEPS[name][sc.level].forEach((st,i)=>lines.push(`${i+1}. ${st}`));
+    });
+    const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&scenarios.some(name=>cat.scenarios.includes(name)); });
     if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
     lines.push("","General guidance only — not legal advice.");
     navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
@@ -1317,7 +1351,7 @@ function App() {
 
   return (
     <div style={s.wrap}>
-      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenario={scenario} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenarios={scenarios} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
 
       <div style={{ maxWidth:"var(--pac-content-width)", margin:"0 auto" }} role="main" aria-label="People Action Check">
 
@@ -1354,7 +1388,7 @@ function App() {
           <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
             <div>
               <div style={{ fontSize:"0.85rem", fontWeight:700, color:"var(--pac-accent)", marginBottom:3 }}>You have a saved session</div>
-              <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)" }}>{META[savedSession.scenario].icon} {savedSession.scenario} — {savedSession.step==="result"?"completed":"in progress"}</div>
+              <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)" }}>{scenarioIcons(entryScenarios(savedSession))} {entryScenarios(savedSession).join(", ")} — {savedSession.step==="result"?"completed":"in progress"}</div>
             </div>
             <div className="pac-resume-actions" style={{ display:"flex", gap:8, flexShrink:0 }}>
               <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
@@ -1364,13 +1398,15 @@ function App() {
         )}
 
         {/* Scenario grid */}
-        <span style={s.label} id="step1-label">Step 1 — select your situation</span>
+        <span style={s.label} id="step1-label">Step 1 — select your situation{step==="pick"?" (choose one or more)":""}</span>
         <div className="pac-scenario-grid" style={s.grid} role="list" aria-labelledby="step1-label">
           {Object.keys(META).map(name=>{
             const mm=META[name];
+            const active = scenarios.includes(name);
+            const onActivate = () => step==="pick" ? toggleScenario(name) : pick(name);
             return (
               <div key={name} role="listitem">
-                <div style={s.scard(scenario===name)} onClick={()=>pick(name)} role="button" tabIndex={0} aria-pressed={scenario===name} aria-label={`${mm.icon} ${name} — ${mm.riskLabel}`} onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&pick(name)}>
+                <div style={s.scard(active)} onClick={onActivate} role="button" tabIndex={0} aria-pressed={active} aria-label={`${mm.icon} ${name} — ${mm.riskLabel}`} onKeyDown={e=>(e.key==="Enter"||e.key===" ")&&onActivate()}>
                   <div style={{ fontSize:"1.3rem" }} aria-hidden="true">{mm.icon}</div>
                   <div style={{ fontSize:"0.85rem", fontWeight:600, lineHeight:1.25 }}>{name}</div>
                   <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
@@ -1379,6 +1415,13 @@ function App() {
             );
           })}
         </div>
+
+        {step==="pick" && scenarios.length>0 && (
+          <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+            <div style={{ fontSize:"0.85rem", fontWeight:600, color:"var(--pac-accent)" }}>{scenarios.length} situation{scenarios.length!==1?"s":""} selected</div>
+            <button style={s.btn(true)} onClick={goToContext}>Continue</button>
+          </div>
+        )}
 
         {/* Session History Box — identity is guaranteed here, sign-in gates the whole app now */}
         {step==="pick" && (
@@ -1427,10 +1470,11 @@ function App() {
               {active.map(f=>{
                 const dueDate = new Date(f.dueDate+`T00:00:00`);
                 const isOverdue = dueDate < today;
+                const fNames = entryScenarios(f);
                 return (
                   <div key={f.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:"var(--pac-surface-2)", border:`1px solid ${isOverdue?"var(--pac-risk-bg-alt)":"var(--pac-warn-border-deep)"}`, borderRadius:"var(--pac-radius-md)", padding:"9px 12px", marginBottom:6, flexWrap:"wrap" }}>
                     <div>
-                      <div style={{ fontSize:"0.84rem", fontWeight:600 }}>{META[f.scenario].icon} {f.scenario}{f.employeeName?` · ${f.employeeName}`:""}</div>
+                      <div style={{ fontSize:"0.84rem", fontWeight:600 }}>{scenarioIcons(fNames)} {fNames.join(", ")}{f.employeeName?` · ${f.employeeName}`:""}</div>
                       <div style={{ fontSize:"0.73rem", color:isOverdue?"var(--pac-risk)":"var(--pac-warn)", marginTop:1 }}>{isOverdue?"Overdue — was due":"Due"} {new Date(f.dueDate+`T00:00:00`).toLocaleDateString()}</div>
                     </div>
                     <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ const updated=followups.map(fu=>fu.id===f.id?{...fu,dismissed:true}:fu); setFollowups(updated); saveFollowups(updated); }}>Dismiss</button>
@@ -1451,56 +1495,60 @@ function App() {
           </div>
         )}
 
-        {/* Context panel */}
-        {step!=="pick" && m && (
-          <div style={{ ...s.card, marginBottom:18 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-              <div style={{ fontSize:"1rem", fontWeight:700 }}>{m.icon} {scenario}</div>
-              <div style={s.badge(m.riskLevel)}>{m.riskLabel}</div>
-            </div>
-            <div style={{ fontSize:"0.88rem", color:"var(--pac-text-70)", lineHeight:1.6, marginBottom:14 }}>{m.description}</div>
-            <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Common examples</div>
-            {m.examples.map((ex,i)=>(
-              <div key={i} style={{ display:"flex", gap:9, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-0)", borderRadius:"var(--pac-radius-md)", padding:"9px 12px", fontSize:"0.82rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
-                <span style={{ color:"var(--pac-text-muted)", flexShrink:0 }}>→</span><span>{ex}</span>
+        {/* Context panel — one card per selected scenario */}
+        {step!=="pick" && scenarios.map((name, idx) => {
+          const mm = META[name];
+          const isLast = idx === scenarios.length - 1;
+          return (
+            <div key={name} style={{ ...s.card, marginBottom:18 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div style={{ fontSize:"1rem", fontWeight:700 }}>{mm.icon} {name}</div>
+                <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
               </div>
-            ))}
-            <div style={{ marginTop:14, marginBottom:4 }}>
-              <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }} onClick={()=>setShowDocTips(v=>!v)}>
-                {showDocTips?"Hide documentation tips":"+ How to document this situation"}
-              </button>
-            </div>
-            {showDocTips && (
-              <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"12px 14px", marginBottom:10 }}>
-                <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:8, fontWeight:700 }}>Documentation guidance</div>
-                {m.docTips.map((tip,i)=>(
-                  <div key={i} style={{ display:"flex", gap:9, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
-                    <span style={{ color:"rgba(34,193,255,0.5)", flexShrink:0, fontWeight:700 }}>{i+1}.</span><span>{tip}</span>
-                  </div>
-                ))}
+              <div style={{ fontSize:"0.88rem", color:"var(--pac-text-70)", lineHeight:1.6, marginBottom:14 }}>{mm.description}</div>
+              <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Common examples</div>
+              {mm.examples.map((ex,i)=>(
+                <div key={i} style={{ display:"flex", gap:9, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-0)", borderRadius:"var(--pac-radius-md)", padding:"9px 12px", fontSize:"0.82rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
+                  <span style={{ color:"var(--pac-text-muted)", flexShrink:0 }}>→</span><span>{ex}</span>
+                </div>
+              ))}
+              <div style={{ marginTop:14, marginBottom:4 }}>
+                <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }} onClick={()=>setShowDocTips(v=>({...v,[name]:!v[name]}))}>
+                  {showDocTips[name]?"Hide documentation tips":"+ How to document this situation"}
+                </button>
               </div>
-            )}
-            <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-warn-text-90)", lineHeight:1.5, margin:"10px 0 10px" }}>
-              <strong>Watch for:</strong> {m.watch}
-            </div>
-            <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.5, marginBottom:16 }}>
-              <strong>Not sure? Contact HR:</strong> {m.contactHR}
-            </div>
-            {step==="context" && (
-              <div style={{ marginBottom:14 }}>
-                <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:600 }}>Employee name <span style={{ color:"var(--pac-text-dim)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></div>
-                <input type="text" placeholder="e.g. Alex Johnson" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", color:"var(--pac-text)", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
-                <div style={{ fontSize:"0.73rem", color:"var(--pac-text-dim)", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
+              {showDocTips[name] && (
+                <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:"var(--pac-radius-md)", padding:"12px 14px", marginBottom:10 }}>
+                  <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:8, fontWeight:700 }}>Documentation guidance</div>
+                  {mm.docTips.map((tip,i)=>(
+                    <div key={i} style={{ display:"flex", gap:9, fontSize:"0.81rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
+                      <span style={{ color:"rgba(34,193,255,0.5)", flexShrink:0, fontWeight:700 }}>{i+1}.</span><span>{tip}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-warn-text-90)", lineHeight:1.5, margin:"10px 0 10px" }}>
+                <strong>Watch for:</strong> {mm.watch}
               </div>
-            )}
-            {step==="context" ? <button style={s.btn(true)} onClick={start}>Start the check</button> : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>}
-          </div>
-        )}
+              <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.5, marginBottom:isLast?16:0 }}>
+                <strong>Not sure? Contact HR:</strong> {mm.contactHR}
+              </div>
+              {isLast && step==="context" && (
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:"0.7rem", color:"var(--pac-text-muted)", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6, fontWeight:600 }}>Employee name <span style={{ color:"var(--pac-text-dim)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></div>
+                  <input type="text" placeholder="e.g. Alex Johnson" value={employeeName} onChange={e=>setEmployeeName(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid var(--pac-border-3)", borderRadius:"var(--pac-radius-md)", padding:"10px 13px", color:"var(--pac-text)", fontSize:"0.88rem", fontFamily:"inherit", outline:"none" }} />
+                  <div style={{ fontSize:"0.73rem", color:"var(--pac-text-dim)", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
+                </div>
+              )}
+              {isLast && (step==="context" ? <button style={s.btn(true)} onClick={start}>Start the check</button> : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>)}
+            </div>
+          );
+        })}
 
         {/* Questions */}
         {(step==="questions"||step==="result") && (
           <div style={{ marginBottom:18 }}>
-            <span style={s.label}>Step 2 — {scenario} check</span>
+            <span style={s.label}>Step 2 — {scenarios.length>1?`${scenarios.length}-situation combined`:scenarios[0]} check</span>
             <div style={{ marginBottom:14 }}>
               <div role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={qs.length} aria-label={`${answered} of ${qs.length} questions answered`} style={{ height:3, background:"var(--pac-border-1)", borderRadius:99, marginBottom:5 }}>
                 <div style={{ height:"100%", borderRadius:99, background:"var(--pac-accent-gradient)", width:`${qs.length?(answered/qs.length)*100:0}%`, transition:"var(--pac-transition-slow)" }} />
@@ -1509,7 +1557,7 @@ function App() {
                 <span>{answered} of {qs.length} answered</span><span>{qs.length?Math.round((answered/qs.length)*100):0}%</span>
               </div>
             </div>
-            <PolicyHint policies={policies} scenario={scenario} />
+            <PolicyHint policies={policies} scenarios={scenarios} />
             <div role="status" aria-live="polite" aria-label={`Current risk level: ${liveMsgs[ll]}`} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 13px", borderRadius:"var(--pac-radius-md)", fontSize:"0.82rem", fontWeight:600, marginBottom:16, border:`1px solid ${liveBorder[ll]}`, background:liveBg[ll], color:liveColors[ll], transition:"var(--pac-transition-base)" }}>
               <div style={{ width:7, height:7, borderRadius:"50%", background:"currentColor", flexShrink:0 }} aria-hidden="true" />
               {liveMsgs[ll]}
@@ -1522,7 +1570,7 @@ function App() {
                 <div key={idx} style={{ background:rowBg, border:`1px solid ${rowBorder}`, borderRadius:11, padding:"13px 15px", marginBottom:9, transition:"var(--pac-transition-fast)" }}>
                   <div className="pac-question-row">
                     <div style={{ flex:1 }} id={`q-label-${idx}`}>
-                      <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:600, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.04em" }}>Question {idx+1} of {qs.length}</div>
+                      <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:600, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.04em" }}>Question {idx+1} of {qs.length}{scenarios.length>1?` · ${META[item._scenario].icon} ${item._scenario}`:""}</div>
                       <div style={{ fontSize:"0.88rem", lineHeight:1.5, display:"flex", alignItems:"center", flexWrap:"wrap", gap:6 }}>
                         {item.q}
                         {item.critical && <span style={{ fontSize:"0.62rem", fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase", background:"var(--pac-risk-bg)", border:"1px solid var(--pac-risk-border)", color:"var(--pac-risk)", borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }} aria-label="Critical question">Critical</span>}
@@ -1553,12 +1601,11 @@ function App() {
         {/* Result */}
         {step==="result" && sc && (()=>{
           const col=C[sc.level];
-          const st2=STEPS[scenario][sc.level];
           const titles={good:"Routine management action — proceed carefully.",warn:"Elevated risk — pause and address gaps before acting.",risk:"High risk — do not proceed without HR or legal review."};
           const summaries={good:"Your answers indicate this situation is within standard management scope. Document each step you take.",warn:"One or more answers reveal gaps in process, documentation, or legal review. Resolve these before taking action.",risk:"Critical risk factors are present. Acting without HR or legal involvement exposes you and the organization significantly."};
           const labels={good:"Low Risk",warn:"Elevated Risk",risk:"High Risk"};
           const dn=qs.length-sc.yes-sc.no;
-          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&(cat.scenarios.includes(scenario)); });
+          const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&scenarios.some(name=>cat.scenarios.includes(name)); });
           return (
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
@@ -1573,16 +1620,21 @@ function App() {
                 <div style={{ fontSize:"1rem", fontWeight:700, color:col.light, marginBottom:6 }}>{titles[sc.level]}</div>
                 <div style={{ fontSize:"0.86rem", lineHeight:1.6, opacity:0.84, marginBottom:14 }}>{summaries[sc.level]}</div>
                 <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Recommended next steps</div>
-                {st2.map((st,i)=>(
-                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:9, fontSize:"0.84rem", lineHeight:1.5, padding:"8px 11px", background:"var(--pac-surface-1)", borderRadius:8, border:"1px solid var(--pac-border-0)", marginBottom:6 }}>
-                    <span style={{ fontSize:"0.68rem", fontWeight:700, width:18, height:18, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1, background:`${col.text}22`, color:col.text }}>{i+1}</span>
-                    <span>{st}</span>
+                {scenarios.map(name=>(
+                  <div key={name} style={{ marginBottom:10 }}>
+                    {scenarios.length>1 && <div style={{ fontSize:"0.72rem", fontWeight:700, color:col.text, marginBottom:6 }}>{META[name].icon} {name}</div>}
+                    {STEPS[name][sc.level].map((st,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:9, fontSize:"0.84rem", lineHeight:1.5, padding:"8px 11px", background:"var(--pac-surface-1)", borderRadius:8, border:"1px solid var(--pac-border-0)", marginBottom:6 }}>
+                        <span style={{ fontSize:"0.68rem", fontWeight:700, width:18, height:18, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1, background:`${col.text}22`, color:col.text }}>{i+1}</span>
+                        <span>{st}</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
               {rel.length>0 && (
                 <div style={{ background:"var(--pac-accent-surface-alt)", border:"1px solid var(--pac-accent-border-4)", borderRadius:11, padding:"13px 16px", marginBottom:12 }}>
-                  <div style={{ fontSize:"0.7rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:9, fontWeight:700 }}>Company documents on file for this scenario</div>
+                  <div style={{ fontSize:"0.7rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-accent-text-70)", marginBottom:9, fontWeight:700 }}>Company documents on file for {scenarios.length>1?"these scenarios":"this scenario"}</div>
                   {rel.map(doc=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===doc.category); return (
                     <div key={doc.id} style={{ display:"flex", alignItems:"center", gap:10, background:"var(--pac-surface-2)", borderRadius:8, padding:"8px 11px", marginBottom:6 }}>
                       <Icon name="fileText" size={18} color="var(--pac-accent)" />
@@ -1595,9 +1647,11 @@ function App() {
                   );})}
                 </div>
               )}
-              <div style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:10, padding:"10px 14px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.55, marginBottom:12 }}>
-                <strong>Still not sure?</strong> {META[scenario].contactHR}
-              </div>
+              {scenarios.map(name=>(
+                <div key={name} style={{ background:"var(--pac-good-bg-alt)", border:"1px solid var(--pac-good-border-alt)", borderRadius:10, padding:"10px 14px", fontSize:"0.82rem", color:"var(--pac-good)", lineHeight:1.55, marginBottom:12 }}>
+                  <strong>Still not sure?{scenarios.length>1?` (${name})`:""}</strong> {META[name].contactHR}
+                </div>
+              ))}
               <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-1)", borderRadius:11, padding:"14px 16px", marginBottom:12 }}>
                 <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:10 }}>Answer breakdown</div>
                 {[["Yes",sc.yes,"var(--pac-good)"],["No",sc.no,"var(--pac-risk)"],["Don't know",dn,"var(--pac-warn)"]].map(([label,count,color])=>(
@@ -1629,7 +1683,7 @@ function App() {
                       <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
                     ) : (
                       <button style={{ ...s.btn(false), borderColor:"var(--pac-warn-border-deep)", color:"var(--pac-warn)" }} onClick={()=>{
-                        const entry = { id:Date.now(), scenario, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO, dismissed:false };
+                        const entry = { id:Date.now(), scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO, dismissed:false };
                         const updated = [entry, ...followups]; setFollowups(updated); saveFollowups(updated); setFollowupSaved(true);
                       }}>Save reminder</button>
                     )}
@@ -1657,36 +1711,45 @@ function App() {
 
               {/* Combined send card */}
               <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
-                {/* Email to self */}
-                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Emailed to you automatically</div>
-                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Your full results, plus a Word doc report and any attached files, go to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>. Add notes and bring it to HR.</div>
-                {emailStatus==="sent" ? (
-                  <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
-                ) : emailStatus==="error" ? (
-                  <div>
-                    <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to your inbox.</div>
-                    <button style={{ ...s.btn(false), marginTop:8 }} onClick={()=>sendEmail(identity && identity.email)}>Try again</button>
-                  </div>
-                ) : (
-                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
-                )}
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send your results</div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
+                  One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before bringing it to HR.
+                </div>
 
-                <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
-
-                {/* Send to HR — fires automatically alongside the employee copy above */}
-                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>{hrEmail ? "Sent to HR automatically" : "Send to HR"}</div>
-                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>{hrEmail ? <>The full check, a Word doc report, and any attached files go to <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong>, and this shows up in the HR Dashboard.</> : "Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard."}</div>
-                {!hrEmail ? (
-                  <div style={{ fontSize:"0.81rem", color:"var(--pac-text-muted)", lineHeight:1.5 }}>HR email not configured yet — an admin can set it in Company Policies → Upload Files.</div>
-                ) : hrEmailStatus==="sent" ? (
-                  <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Sent to HR</div>
-                ) : hrEmailStatus==="error" ? (
-                  <div>
-                    <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to HR.</div>
-                    <button style={{ ...s.btn(false), marginTop:8 }} onClick={sendToHR}>Try again</button>
-                  </div>
+                {emailStatus==="idle" && hrEmailStatus==="idle" ? (
+                  <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={sendAll}>Send to {hrEmail ? "me and HR" : "me"}</button>
                 ) : (
-                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
+                  <>
+                    {/* Email to self */}
+                    <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>Your copy</div>
+                    {emailStatus==="sent" ? (
+                      <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
+                    ) : emailStatus==="error" ? (
+                      <div>
+                        <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to your inbox.</div>
+                        <button style={{ ...s.btn(false), marginTop:8 }} onClick={()=>sendEmail(identity && identity.email)}>Try again</button>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
+                    )}
+
+                    {hrEmail.includes("@") && (
+                      <>
+                        <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
+                        <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>HR's copy</div>
+                        {hrEmailStatus==="sent" ? (
+                          <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Sent to HR</div>
+                        ) : hrEmailStatus==="error" ? (
+                          <div>
+                            <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to HR.</div>
+                            <button style={{ ...s.btn(false), marginTop:8 }} onClick={sendToHR}>Try again</button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
 
                 <div style={{ borderTop:"1px solid var(--pac-border-2)", marginTop:16, paddingTop:16 }}>
