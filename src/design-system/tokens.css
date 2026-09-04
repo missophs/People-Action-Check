@@ -223,6 +223,9 @@ textarea:focus   { border-color: rgba(34,193,255,0.35) !important; }
 input:focus      { outline: none; border-color: rgba(34,193,255,0.35) !important; }
 .email-input:focus { border-color: var(--pac-accent) !important; }
 
+/* ─── Placeholder text — override the browser's light-mode default gray ─── */
+input::placeholder, textarea::placeholder { color: var(--pac-text-dim); opacity: 1; }
+
 /* ─── Interactive states ─────────────────────────────── */
 .ans-btn {
   transition: var(--pac-transition-fast);
