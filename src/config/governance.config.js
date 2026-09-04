@@ -31,8 +31,10 @@ export const GOVERNANCE = {
     },
     adminPin: {
       description: 'PIN for accessing admin settings and the policy library',
-      storage: 'localStorage-hashed-sha256',
+      storage: 'netlify-blobs-hashed-sha256',
       auth: 'self',
+      api: { read: '/api/get-pin', write: '/api/save-pin' },
+      note: 'localStorage is kept as an offline fallback only; the server copy is source of truth.',
       securityNote: 'Default PIN (1234) must be force-changed on first admin login. Phase 3 work item.',
     },
   },

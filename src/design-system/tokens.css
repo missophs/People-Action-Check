@@ -54,11 +54,11 @@
 
   /* ── Text */
   --pac-text:                #f8fafc;
-  --pac-text-70:             rgba(248,250,252,0.88);
-  --pac-text-65:             rgba(248,250,252,0.80);
-  --pac-text-60:             rgba(248,250,252,0.75);
-  --pac-text-muted:          #b8c4d0;
-  --pac-text-dim:            #94a3b3;
+  --pac-text-70:             rgba(248,250,252,0.95);
+  --pac-text-65:             rgba(248,250,252,0.90);
+  --pac-text-60:             rgba(248,250,252,0.85);
+  --pac-text-muted:          #ccd8e3;
+  --pac-text-dim:            #aab9c8;
 
   /* ── Overlay */
   --pac-overlay:             rgba(2,6,23,0.88);

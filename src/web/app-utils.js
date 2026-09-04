@@ -102,9 +102,25 @@ async function verifyGoogleCredential(credential) {
   return res.json();
 }
 
-// ── PIN ───────────────────────────────────────────────────────────────────
+// ── PIN (local cache + server-synced, so it follows you across devices) ────
 function loadPinHash()      { try { return localStorage.getItem(PIN_KEY) || DEFAULT_PIN_HASH; } catch(e){return DEFAULT_PIN_HASH;} }
 function savePinHash(h)     { try { localStorage.setItem(PIN_KEY, h); } catch(e) {} }
+
+async function fetchPinHashFromServer() {
+  var res = await fetch("/api/get-pin");
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.pinHash || "";
+}
+
+async function savePinHashToServer(h) {
+  var res = await fetch("/api/save-pin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinHash: h }),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
 
 // ── HR email (local + server-synced) ──────────────────────────────────────
 function loadHrEmail()      { try { return localStorage.getItem(HR_EMAIL_KEY)||""; } catch(e){return "";} }

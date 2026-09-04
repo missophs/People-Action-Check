@@ -51,11 +51,23 @@ function PinGate({ onUnlock, mode }) {
 
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, [changing]);
 
+  // The server (Netlify Blobs) is the source of truth so the PIN follows
+  // you across devices. localStorage is only a fallback if the fetch fails.
+  const getCurrentPinHash = async () => {
+    try {
+      const serverHash = await fetchPinHashFromServer();
+      return serverHash || DEFAULT_PIN_HASH;
+    } catch (e) {
+      console.error("Couldn't reach server for PIN, using local copy", e);
+      return loadPinHash();
+    }
+  };
+
   const triggerShake = () => { setShakeKey(k=>k+1); };
 
   const handleUnlock = async () => {
     const hash = await sha256(pin);
-    const stored = loadPinHash();
+    const stored = await getCurrentPinHash();
     if (hash === stored) {
       if (stored === DEFAULT_PIN_HASH) {
         setError("Default PIN must be changed before first use.");
@@ -68,10 +80,12 @@ function PinGate({ onUnlock, mode }) {
     if (newPin.length < 4) { setError("PIN must be at least 4 characters."); return; }
     if (newPin !== confirmPin) { setError("PINs do not match."); triggerShake(); return; }
     const currentHash = await sha256(pin);
-    const stored = loadPinHash();
+    const stored = await getCurrentPinHash();
     if (currentHash !== stored) { setError("Current PIN is incorrect."); setPin(""); triggerShake(); return; }
     const newHash = await sha256(newPin);
     savePinHash(newHash);
+    try { await savePinHashToServer(newHash); }
+    catch (e) { console.error("Couldn't save PIN to server, saved locally only", e); }
     onUnlock();
   };
 
@@ -355,6 +369,8 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
     setShowReset(false); setUnlocked(false); setTab("view");
     try { await resetAllPolicies(); }
     catch (err) { console.error("Couldn't reset policies on the server", err); }
+    try { await savePinHashToServer(DEFAULT_PIN_HASH); }
+    catch (err) { console.error("Couldn't reset PIN on the server", err); }
   };
 
   const relevantDocs = currentScenarios && currentScenarios.length
@@ -1506,7 +1522,7 @@ function App() {
                 <div style={s.badge(mm.riskLevel)}>{mm.riskLabel}</div>
               </div>
               <div style={{ fontSize:"0.88rem", color:"var(--pac-text-70)", lineHeight:1.6, marginBottom:14 }}>{mm.description}</div>
-              <div style={{ fontSize:"0.68rem", letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Common examples</div>
+              <div style={{ fontSize:"0.68rem", fontWeight:600, letterSpacing:"0.07em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:9 }}>Common examples</div>
               {mm.examples.map((ex,i)=>(
                 <div key={i} style={{ display:"flex", gap:9, background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-0)", borderRadius:"var(--pac-radius-md)", padding:"9px 12px", fontSize:"0.82rem", lineHeight:1.5, color:"var(--pac-text-70)", marginBottom:6 }}>
                   <span style={{ color:"var(--pac-text-muted)", flexShrink:0 }}>→</span><span>{ex}</span>

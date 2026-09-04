@@ -21,11 +21,11 @@ export const COLOR = {
 
   // ── Text
   text:             '#f8fafc',
-  text70:           'rgba(248,250,252,0.88)',
-  text65:           'rgba(248,250,252,0.80)',
-  text60:           'rgba(248,250,252,0.75)',
-  textMuted:        '#b8c4d0',
-  textDim:          '#94a3b3',
+  text70:           'rgba(248,250,252,0.95)',
+  text65:           'rgba(248,250,252,0.90)',
+  text60:           'rgba(248,250,252,0.85)',
+  textMuted:        '#ccd8e3',
+  textDim:          '#aab9c8',
 
   // ── Accent (primary interactive — cyan)
   accent:           '#22c1ff',
