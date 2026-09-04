@@ -23,27 +23,12 @@ browser — so it's not lost if someone clears their browser or switches devices
 Still browser-only (not yet synced): PIN, Slack/Teams webhook URLs, 30-day follow-up
 reminders. Not touched this session, flagged for later if it matters.
 
-## Open — blocks login right now
+## Fixed — 2026-09-04
 
-**Google Sign-In fails: "Error 400: origin_mismatch."**
-
-Cause: the OAuth client's Authorized JavaScript origins list only has
-`https://pachr.netlify.app` (the site that got disabled). It's missing
-`https://peopleactioncheck.netlify.app`, so Google refuses the login on the live site.
-
-Fix (in Google Cloud Console, not a code change):
-1. console.cloud.google.com → make sure the "People Action Check" project is selected
-2. Search bar at top → type `Credentials` → click **Credentials** under APIs & Services
-3. Under "OAuth 2.0 Client IDs," click **PAC Web**
-4. Under **Authorized JavaScript origins**, click **+ Add URI**
-5. Type `https://peopleactioncheck.netlify.app` in the new box (leave the existing
-   `pachr.netlify.app` line alone)
-6. Scroll down, click **Save**
-7. Wait ~5 minutes, then reload the site and try signing in again
-
-We got as far as being on the "PAC Web" client's Authorized JavaScript origins page,
-about to click "+ Add URI," when the session ended for the night. This is the very
-next click to make.
+**Google Sign-In "Error 400: origin_mismatch" is resolved.** The OAuth client
+("PAC Web") now has both `https://pachr.netlify.app` and
+`https://peopleactioncheck.netlify.app` under Authorized JavaScript origins, saved
+and confirmed working. Login on the live site works.
 
 ## Open — needs a look, not yet diagnosed
 
