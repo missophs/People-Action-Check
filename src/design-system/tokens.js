@@ -21,11 +21,11 @@ export const COLOR = {
 
   // ── Text
   text:             '#f8fafc',
-  text70:           'rgba(248,250,252,0.70)',
-  text65:           'rgba(248,250,252,0.65)',
-  text60:           'rgba(248,250,252,0.60)',
-  textMuted:        '#8899aa',
-  textDim:          '#667788',
+  text70:           'rgba(248,250,252,0.88)',
+  text65:           'rgba(248,250,252,0.80)',
+  text60:           'rgba(248,250,252,0.75)',
+  textMuted:        '#b8c4d0',
+  textDim:          '#94a3b3',
 
   // ── Accent (primary interactive — cyan)
   accent:           '#22c1ff',
@@ -39,11 +39,11 @@ export const COLOR = {
   accentSurfaceAlt: 'rgba(34,193,255,0.05)',
   accentSurface2:   'rgba(34,193,255,0.06)',
   accentTabBg:      'rgba(34,193,255,0.15)',
-  accentText55:     'rgba(34,193,255,0.55)',
-  accentText65:     'rgba(34,193,255,0.65)',
-  accentText70:     'rgba(34,193,255,0.70)',
-  accentText75:     'rgba(34,193,255,0.75)',
-  accentText85:     'rgba(34,193,255,0.85)',
+  accentText55:     'rgba(34,193,255,0.85)',
+  accentText65:     'rgba(34,193,255,0.90)',
+  accentText70:     'rgba(34,193,255,0.92)',
+  accentText75:     'rgba(34,193,255,0.95)',
+  accentText85:     'rgba(34,193,255,1)',
 
   // ── Accent gradients
   accentGradient:       'linear-gradient(90deg,#22c1ff,#6ee7b7)',

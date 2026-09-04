@@ -54,11 +54,11 @@
 
   /* ── Text */
   --pac-text:                #f8fafc;
-  --pac-text-70:             rgba(248,250,252,0.70);
-  --pac-text-65:             rgba(248,250,252,0.65);
-  --pac-text-60:             rgba(248,250,252,0.60);
-  --pac-text-muted:          #8899aa;
-  --pac-text-dim:            #667788;
+  --pac-text-70:             rgba(248,250,252,0.88);
+  --pac-text-65:             rgba(248,250,252,0.80);
+  --pac-text-60:             rgba(248,250,252,0.75);
+  --pac-text-muted:          #b8c4d0;
+  --pac-text-dim:            #94a3b3;
 
   /* ── Overlay */
   --pac-overlay:             rgba(2,6,23,0.88);
@@ -75,11 +75,11 @@
   --pac-accent-surface-alt:  rgba(34,193,255,0.05);
   --pac-accent-surface-2:    rgba(34,193,255,0.06);
   --pac-accent-tab-bg:       rgba(34,193,255,0.15);
-  --pac-accent-text-55:      rgba(34,193,255,0.55);
-  --pac-accent-text-65:      rgba(34,193,255,0.65);
-  --pac-accent-text-70:      rgba(34,193,255,0.70);
-  --pac-accent-text-75:      rgba(34,193,255,0.75);
-  --pac-accent-text-85:      rgba(34,193,255,0.85);
+  --pac-accent-text-55:      rgba(34,193,255,0.85);
+  --pac-accent-text-65:      rgba(34,193,255,0.90);
+  --pac-accent-text-70:      rgba(34,193,255,0.92);
+  --pac-accent-text-75:      rgba(34,193,255,0.95);
+  --pac-accent-text-85:      rgba(34,193,255,1);
   --pac-accent-gradient:     linear-gradient(90deg,#22c1ff,#6ee7b7);
   --pac-accent-card-gradient:linear-gradient(135deg,rgba(34,193,255,0.12),rgba(110,231,183,0.07));
   --pac-accent-panel-gradient:linear-gradient(135deg,rgba(34,193,255,0.07),rgba(110,231,183,0.05));
