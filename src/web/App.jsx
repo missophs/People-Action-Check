@@ -1264,9 +1264,12 @@ function App() {
   };
 
   // Sign-in is required to use the tool, so results always have a real address to send to.
+  // HR fires the same way, right alongside it, as long as an admin has configured an HR
+  // address — no separate click needed for either leg of "email employee + HR".
   useEffect(() => {
     if (step==="result" && identity && emailStatus==="idle") { sendEmail(identity.email); }
-  }, [step, identity]);
+    if (step==="result" && hrEmail.includes("@") && hrEmailStatus==="idle") { sendToHR(); }
+  }, [step, identity, hrEmail]);
 
   const pick  = (name) => { setScenario(name); setStep("context"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips(false); setShowResume(false); setAttachments([]); };
   const start = () => { const n=QS[scenario].length; setAnswers(new Array(n).fill(null)); setNotes(new Array(n).fill("")); setHints(new Array(n).fill(false)); setStep("questions"); setEmailStatus("idle"); };
@@ -1670,21 +1673,20 @@ function App() {
 
                 <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
 
-                {/* Send to HR */}
-                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send to HR</div>
-                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard.</div>
+                {/* Send to HR — fires automatically alongside the employee copy above */}
+                <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>{hrEmail ? "Sent to HR automatically" : "Send to HR"}</div>
+                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:12 }}>{hrEmail ? <>The full check, a Word doc report, and any attached files go to <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong>, and this shows up in the HR Dashboard.</> : "Sends the full check, a Word doc report, and any attached files directly to your HR team. Logged in the HR Dashboard."}</div>
                 {!hrEmail ? (
                   <div style={{ fontSize:"0.81rem", color:"var(--pac-text-muted)", lineHeight:1.5 }}>HR email not configured yet — an admin can set it in Company Policies → Upload Files.</div>
                 ) : hrEmailStatus==="sent" ? (
                   <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Sent to HR</div>
-                ) : (
+                ) : hrEmailStatus==="error" ? (
                   <div>
-                    <div style={{ fontSize:"0.77rem", color:"var(--pac-text-muted)", marginBottom:10 }}>Sending to: <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong></div>
-                    <button style={{ ...s.btn(true), opacity:hrEmailStatus==="sending"?0.6:1 }} onClick={sendToHR} disabled={hrEmailStatus==="sending"}>
-                      {hrEmailStatus==="sending"?"Sending...":"Send to HR"}
-                    </button>
-                    {hrEmailStatus==="error" && <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)", marginTop:6 }}>Something went wrong. Try again.</div>}
+                    <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to HR.</div>
+                    <button style={{ ...s.btn(false), marginTop:8 }} onClick={sendToHR}>Try again</button>
                   </div>
+                ) : (
+                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
                 )}
 
                 <div style={{ borderTop:"1px solid var(--pac-border-2)", marginTop:16, paddingTop:16 }}>
