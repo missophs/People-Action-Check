@@ -1342,7 +1342,7 @@ function App() {
   const s = {
     wrap:  { fontFamily:"var(--pac-font)", background:"var(--pac-bg-gradient)", minHeight:"100vh", color:"var(--pac-text)", padding:"var(--pac-page-padding)" },
     card:  { background:"var(--pac-surface-0)", border:"1px solid var(--pac-border-1)", borderRadius:"var(--pac-radius-card)", padding:"var(--pac-card-padding)", marginBottom:20 },
-    label: { fontSize:"var(--pac-text-xs)", letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--pac-text-muted)", marginBottom:10, display:"block" },
+    label: { fontSize:"var(--pac-text-xs)", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--pac-text)", marginBottom:10, display:"block" },
     grid:  { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, marginBottom:22 },
     scard: (active) => ({ background:active?"var(--pac-accent-card-gradient)":"var(--pac-surface-1)", border:`1px solid ${active?"rgba(34,193,255,0.6)":"var(--pac-border-1)"}`, borderRadius:"var(--pac-radius-2xl)", padding:"13px 12px", cursor:"pointer", display:"flex", flexDirection:"column", gap:6, transition:"var(--pac-transition-fast)" }),
     badge: (level) => ({ fontSize:"var(--pac-text-xxs)", fontWeight:700, letterSpacing:"0.05em", padding:"2px 7px", borderRadius:"var(--pac-radius-badge)", width:"fit-content", textTransform:"uppercase", background:level==="high"?"rgba(251,113,133,0.15)":"rgba(251,191,36,0.12)", color:level==="high"?"var(--pac-risk)":"var(--pac-warn)", border:`1px solid ${level==="high"?"var(--pac-risk-border-alt)":"var(--pac-warn-border-alt)"}` }),

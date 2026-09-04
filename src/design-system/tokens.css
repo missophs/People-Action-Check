@@ -57,8 +57,8 @@
   --pac-text-70:             rgba(248,250,252,0.95);
   --pac-text-65:             rgba(248,250,252,0.90);
   --pac-text-60:             rgba(248,250,252,0.85);
-  --pac-text-muted:          #ccd8e3;
-  --pac-text-dim:            #aab9c8;
+  --pac-text-muted:          #dbe4ed;
+  --pac-text-dim:            #bccbda;
 
   /* ── Overlay */
   --pac-overlay:             rgba(2,6,23,0.88);

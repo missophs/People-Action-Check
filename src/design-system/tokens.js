@@ -24,8 +24,8 @@ export const COLOR = {
   text70:           'rgba(248,250,252,0.95)',
   text65:           'rgba(248,250,252,0.90)',
   text60:           'rgba(248,250,252,0.85)',
-  textMuted:        '#ccd8e3',
-  textDim:          '#aab9c8',
+  textMuted:        '#dbe4ed',
+  textDim:          '#bccbda',
 
   // ── Accent (primary interactive — cyan)
   accent:           '#22c1ff',
