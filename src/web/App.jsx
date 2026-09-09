@@ -1305,10 +1305,11 @@ function App() {
   };
 
   // Sending is an explicit action on the result screen — one button fires both
-  // the employee copy (to the signed-in identity) and the HR copy (when an HR
-  // address is configured) at the same time.
+  // the employee copy (to the signed-in identity, or a typed address if not
+  // signed in) and the HR copy (when an HR address is configured) at once.
   const sendAll = () => {
-    if (identity) sendEmail(identity.email);
+    const self = identity ? identity.email : emailAddr;
+    if (self && self.includes("@")) sendEmail(self);
     if (hrEmail.includes("@")) sendToHR();
   };
 
@@ -1388,15 +1389,6 @@ function App() {
           </div>
         </div>
 
-        {!identity ? (
-          <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"22px 18px", textAlign:"center" }}>
-            <Icon name="history" size={22} color="var(--pac-text)" />
-            <div style={{ fontWeight:700, fontSize:"0.95rem", marginTop:8 }}>Sign in to use People Action Check</div>
-            <div style={{ fontSize:"0.8rem", color:"var(--pac-text-muted)", marginTop:6, marginBottom:14 }}>Your checks are tied to your account so you can always find your history, and results are emailed to you automatically.</div>
-            <div ref={googleBtnRef} style={{ display:"flex", justifyContent:"center" }}></div>
-            {identityError && <div style={{ fontSize:"0.76rem", color:"var(--pac-risk)", marginTop:10 }}>{identityError}</div>}
-          </div>
-        ) : (
         <>
 
         {/* Resume banner */}
@@ -1439,37 +1431,51 @@ function App() {
           </div>
         )}
 
-        {/* Session History Box — identity is guaranteed here, sign-in gates the whole app now */}
+        {/* Session History Box — sign-in is optional and only gates this box */}
         {step==="pick" && (
           <div style={{ marginBottom:18 }}>
-            <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:"12px 12px 0 0", padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <Icon name="history" size={20} color="var(--pac-text)" />
-                <div>
+            {!identity ? (
+              <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:12, padding:"14px 18px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <Icon name="history" size={20} color="var(--pac-text)" />
                   <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
-                  <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""}`}</div>
                 </div>
+                <div style={{ fontSize:"0.79rem", color:"var(--pac-text-muted)", marginBottom:10 }}>Sign in with Google to view your check history.</div>
+                <div ref={googleBtnRef}></div>
+                {identityError && <div style={{ fontSize:"0.76rem", color:"var(--pac-risk)", marginTop:8 }}>{identityError}</div>}
               </div>
-              <button style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0, flexShrink:0 }} onClick={signOut}>Signed in as {identity.email} · Sign out</button>
-            </div>
-            <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
-              {checkHistory.length===0 ? (
-                <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
-              ) : (
-                <div>
-                  <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                    <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
+            ) : (
+              <>
+                <div style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-3)", borderRadius:"12px 12px 0 0", padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <Icon name="history" size={20} color="var(--pac-text)" />
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:"0.9rem" }}>Session History</div>
+                      <div style={{ fontSize:"0.76rem", color:"var(--pac-text-muted)", marginTop:1 }}>{checkHistory.length===0?"No past checks yet":`${checkHistory.length} saved check${checkHistory.length!==1?"s":""}`}</div>
+                    </div>
                   </div>
-                  {viewingPast!==null && checkHistory[viewingPast] ? (
-                    <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
+                  <button style={{ fontSize:"0.72rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0, flexShrink:0 }} onClick={signOut}>Signed in as {identity.email} · Sign out</button>
+                </div>
+                <div style={{ background:"var(--pac-surface-2)", border:"1px solid var(--pac-border-1)", borderTop:"none", borderRadius:"0 0 12px 12px", padding:"14px 16px" }}>
+                  {checkHistory.length===0 ? (
+                    <div style={{ textAlign:"center", padding:"16px 0", color:"var(--pac-text-muted)", fontSize:"0.83rem" }}>No past checks saved yet. Complete a check to see it here.</div>
                   ) : (
-                    checkHistory.map((e,i)=>(
-                      <CheckHistoryRow key={e.id} entry={e} onClick={()=>setViewingPast(i)} onDelete={()=>{ const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); deleteCheckHistoryEntry(e.id).catch(err => console.error("Couldn't delete check history entry", err)); }} />
-                    ))
+                    <div>
+                      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                        <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
+                      </div>
+                      {viewingPast!==null && checkHistory[viewingPast] ? (
+                        <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
+                      ) : (
+                        checkHistory.map((e,i)=>(
+                          <CheckHistoryRow key={e.id} entry={e} onClick={()=>setViewingPast(i)} onDelete={()=>{ const updated=checkHistory.filter((_,idx)=>idx!==i); setCheckHistory(updated); deleteCheckHistoryEntry(e.id).catch(err => console.error("Couldn't delete check history entry", err)); }} />
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1728,30 +1734,47 @@ function App() {
               {/* Combined send card */}
               <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
                 <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send your results</div>
-                <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
-                  One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before bringing it to HR.
-                </div>
+                {identity ? (
+                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
+                    One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before bringing it to HR.
+                  </div>
+                ) : (
+                  <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
+                    Want a copy of the full check, a Word doc report, and any attached files? Enter your email below.{hrEmail ? <> HR gets a copy at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard) either way.</> : " HR email isn't configured yet; an admin can set it in Company Policies → Upload Files."}
+                  </div>
+                )}
 
                 {emailStatus==="idle" && hrEmailStatus==="idle" ? (
-                  <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={sendAll}>Send to {hrEmail ? "me and HR" : "me"}</button>
+                  identity ? (
+                    <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={sendAll}>Send to {hrEmail ? "me and HR" : "me"}</button>
+                  ) : (
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      <input type="email" placeholder="your@email.com" value={emailAddr} onChange={e=>setEmailAddr(e.target.value)} aria-label="Your email address" style={{ flex:1, minWidth:160, background:"rgba(255,255,255,0.08)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:"var(--pac-radius-md)", padding:"11px 14px", color:"var(--pac-text)", fontSize:"16px", fontFamily:"inherit", outline:"none" }} />
+                      <button style={{ ...s.btn(true), padding:"11px 20px" }} onClick={sendAll} disabled={!emailAddr.includes("@") && !hrEmail.includes("@")} aria-disabled={!emailAddr.includes("@") && !hrEmail.includes("@")}>{hrEmail.includes("@") ? "Send" : "Send to my email"}</button>
+                    </div>
+                  )
                 ) : (
                   <>
-                    {/* Email to self */}
-                    <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>Your copy</div>
-                    {emailStatus==="sent" ? (
-                      <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
-                    ) : emailStatus==="error" ? (
-                      <div>
-                        <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to your inbox.</div>
-                        <button style={{ ...s.btn(false), marginTop:8 }} onClick={()=>sendEmail(identity && identity.email)}>Try again</button>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
+                    {/* Email to self — only shown if a self address was actually sent to */}
+                    {(identity || emailAddr.includes("@")) && (
+                      <>
+                        <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>Your copy</div>
+                        {emailStatus==="sent" ? (
+                          <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600, marginBottom:0 }}>✓ Sent to your inbox</div>
+                        ) : emailStatus==="error" ? (
+                          <div>
+                            <div style={{ fontSize:"0.78rem", color:"var(--pac-risk)" }}>Something went wrong sending to your inbox.</div>
+                            <button style={{ ...s.btn(false), marginTop:8 }} onClick={()=>sendEmail(identity ? identity.email : emailAddr)}>Try again</button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:"0.82rem", color:"var(--pac-text-muted)" }}>Sending...</div>
+                        )}
+                      </>
                     )}
 
                     {hrEmail.includes("@") && (
                       <>
-                        <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />
+                        {(identity || emailAddr.includes("@")) && <div style={{ borderTop:"1px solid var(--pac-border-2)", margin:"16px 0" }} />}
                         <div style={{ fontSize:"0.68rem", color:"var(--pac-text-muted)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:5 }}>HR's copy</div>
                         {hrEmailStatus==="sent" ? (
                           <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Sent to HR</div>
@@ -1777,7 +1800,6 @@ function App() {
         })()}
 
         </>
-        )}
 
         <div style={{ marginTop:28, textAlign:"center", fontSize:"0.74rem", color:"var(--pac-text-muted)", lineHeight:1.8 }}>
           General guidance only — not legal advice.<br />
