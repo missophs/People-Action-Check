@@ -1626,7 +1626,7 @@ function App() {
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
                 <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
-                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, use <strong style={{ color:"var(--pac-accent)" }}>Send to me and HR</strong> at the bottom of this page to email yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
+                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, use <strong style={{ color:"var(--pac-accent)" }}>Send to me and HR</strong> at the bottom of this page to email yourself a copy — add your own notes or context directly in the email before sending it to HR.</div>
               </div>
               <span style={s.label}>Assessment</span>
               {sc.crit && <div style={{ background:"var(--pac-risk-bg-light)", border:"1px solid var(--pac-risk-border-med)", borderRadius:11, padding:"12px 14px", fontSize:"0.84rem", color:"var(--pac-risk-text-90)", lineHeight:1.55, marginBottom:11 }}><strong>Critical question not confirmed.</strong> One or more questions marked Critical were answered No or Don't Know. These carry significant legal exposure. HR and legal review is required before any action.</div>}
@@ -1729,7 +1729,7 @@ function App() {
               <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
                 <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send your results</div>
                 <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
-                  One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before bringing it to HR.
+                  One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before sending it to HR.
                 </div>
 
                 {emailStatus==="idle" && hrEmailStatus==="idle" ? (
