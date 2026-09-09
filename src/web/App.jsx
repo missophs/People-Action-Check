@@ -1626,7 +1626,7 @@ function App() {
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
                 <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
-                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, <strong style={{ color:"var(--pac-accent)" }}>enter your email at the bottom of this page</strong> to send yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
+                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, use <strong style={{ color:"var(--pac-accent)" }}>Send to me and HR</strong> at the bottom of this page to email yourself a copy — add your own notes or context directly in the email before bringing it to HR.</div>
               </div>
               <span style={s.label}>Assessment</span>
               {sc.crit && <div style={{ background:"var(--pac-risk-bg-light)", border:"1px solid var(--pac-risk-border-med)", borderRadius:11, padding:"12px 14px", fontSize:"0.84rem", color:"var(--pac-risk-text-90)", lineHeight:1.55, marginBottom:11 }}><strong>Critical question not confirmed.</strong> One or more questions marked Critical were answered No or Don't Know. These carry significant legal exposure. HR and legal review is required before any action.</div>}
