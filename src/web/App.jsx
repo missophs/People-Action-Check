@@ -1390,6 +1390,11 @@ function App() {
               <div style={{ fontSize:"1.25rem", fontWeight:700 }}>People Action Check</div>
               <div className="hdr-desc" style={{ fontSize:"0.83rem", color:"var(--pac-text-muted)", marginTop:3 }}>A private confidence check for people-management decisions. Sign in to sync your check history across devices.</div>
             </div>
+            {(step==="context"||step==="questions") && (
+              <button className="hdr-close" onClick={startNew} style={{ ...s.btn(false), flexShrink:0, whiteSpace:"nowrap" }} aria-label="Close this check and return to start">
+                Close
+              </button>
+            )}
             <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"var(--pac-accent-border-alt)",color:"var(--pac-accent)",background:"var(--pac-accent-surface)"}:{}) }}>
               <Icon name="folder" size={14} />
               <span>Company Policies{policies.length>0?` (${policies.length})`:""}</span>
