@@ -931,7 +931,7 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
                 ) : (
                   <div>
                     <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{
+                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", textDecoration:"underline", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{
                         if (!window.confirm(`Clear all ${allChecks.length} check(s) for every manager? This can't be undone.`)) return;
                         setAllChecks([]);
                         clearCheckHistory().catch(err => console.error("Couldn't clear all checks", err));
@@ -1500,7 +1500,7 @@ function App() {
                   <Icon name="calendar" size={18} color="var(--pac-warn)" />
                   <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
                 </div>
-                <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setFollowups([]); clearFollowups(identity.email).catch(err => console.error("Couldn't clear follow-up reminders", err)); }}>Clear all reminders</button>
+                <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", textDecoration:"underline", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setFollowups([]); clearFollowups(identity.email).catch(err => console.error("Couldn't clear follow-up reminders", err)); }}>Clear all reminders</button>
               </div>
               {active.map(f=>{
                 const dueDate = new Date(f.dueDate+`T00:00:00`);
