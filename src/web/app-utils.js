@@ -177,9 +177,30 @@ async function clearHrSubmissions() {
   if (!res.ok) throw new Error("clear failed");
 }
 
-// ── Follow-ups ────────────────────────────────────────────────────────────
-function loadFollowups()     { try { var d=localStorage.getItem(HR_FOLLOWUPS_KEY); return d?JSON.parse(d):[]; } catch(e){return[];} }
-function saveFollowups(d)    { try { localStorage.setItem(HR_FOLLOWUPS_KEY, JSON.stringify(d)); } catch(e) {} }
+// ── Follow-ups (server-synced, per-manager — see netlify/functions/followup-store.js) ─
+async function fetchFollowups(email) {
+  var res = await fetch("/api/followup-store" + (email ? "?email=" + encodeURIComponent(email) : ""));
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.followups || [];
+}
+async function createFollowupEntry(entry) {
+  var res = await fetch("/api/followup-store", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error("save failed");
+  return res.json();
+}
+async function deleteFollowupEntry(id) {
+  var res = await fetch("/api/followup-store?id=" + encodeURIComponent(id), { method: "DELETE" });
+  if (!res.ok) throw new Error("delete failed");
+}
+async function clearFollowups(email) {
+  var res = await fetch("/api/followup-store" + (email ? "?email=" + encodeURIComponent(email) : ""), { method: "DELETE" });
+  if (!res.ok) throw new Error("clear failed");
+}
 
 // ── Webhooks ──────────────────────────────────────────────────────────────
 function loadSlackWebhook()  { try { return localStorage.getItem(SLACK_WEBHOOK_KEY)||""; } catch(e){return "";} }

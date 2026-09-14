@@ -1089,17 +1089,19 @@ function App() {
   const [teamsWebhook, setTeamsWebhook]     = useState("");
 
   useEffect(() => {
-    setHrEmail(loadHrEmail()); setFollowups(loadFollowups()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
+    setHrEmail(loadHrEmail()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
 
-  // Session History is per-manager, filtered to their verified Google identity.
+  // Session History and follow-up reminders are per-manager, filtered to
+  // their verified Google identity, and synced across their devices.
   useEffect(() => {
-    if (!identity) { setCheckHistory([]); return; }
+    if (!identity) { setCheckHistory([]); setFollowups([]); return; }
     fetchCheckHistory(identity.email).then(setCheckHistory).catch(err => console.error("Couldn't load check history", err));
+    fetchFollowups(identity.email).then(setFollowups).catch(err => console.error("Couldn't load follow-up reminders", err));
   }, [identity]);
 
   const handleGoogleCredential = async (response) => {
@@ -1488,8 +1490,8 @@ function App() {
         )}
 
         {/* Follow-up reminders */}
-        {step==="pick" && followups.filter(f=>!f.dismissed).length>0 && (()=>{
-          const active = followups.filter(f=>!f.dismissed).sort((a,b)=>new Date(a.dueDate+`T00:00:00`)-new Date(b.dueDate+`T00:00:00`));
+        {step==="pick" && followups.length>0 && (()=>{
+          const active = [...followups].sort((a,b)=>new Date(a.dueDate+`T00:00:00`)-new Date(b.dueDate+`T00:00:00`));
           const today = new Date(); today.setHours(0,0,0,0);
           return (
             <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18 }}>
@@ -1498,7 +1500,7 @@ function App() {
                   <Icon name="calendar" size={18} color="var(--pac-warn)" />
                   <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
                 </div>
-                <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setFollowups([]); saveFollowups([]); }}>Clear all reminders</button>
+                <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setFollowups([]); clearFollowups(identity.email).catch(err => console.error("Couldn't clear follow-up reminders", err)); }}>Clear all reminders</button>
               </div>
               {active.map(f=>{
                 const dueDate = new Date(f.dueDate+`T00:00:00`);
@@ -1510,7 +1512,7 @@ function App() {
                       <div style={{ fontSize:"0.84rem", fontWeight:600 }}>{scenarioIcons(fNames)} {fNames.join(", ")}{f.employeeName?` · ${f.employeeName}`:""}</div>
                       <div style={{ fontSize:"0.73rem", color:isOverdue?"var(--pac-risk)":"var(--pac-warn)", marginTop:1 }}>{isOverdue?"Overdue — was due":"Due"} {new Date(f.dueDate+`T00:00:00`).toLocaleDateString()}</div>
                     </div>
-                    <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ const updated=followups.map(fu=>fu.id===f.id?{...fu,dismissed:true}:fu); setFollowups(updated); saveFollowups(updated); }}>Dismiss</button>
+                    <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ const updated=followups.filter(fu=>fu.id!==f.id); setFollowups(updated); deleteFollowupEntry(f.id).catch(err => console.error("Couldn't dismiss follow-up reminder", err)); }}>Dismiss</button>
                   </div>
                 );
               })}
@@ -1717,8 +1719,9 @@ function App() {
                       <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
                     ) : (
                       <button style={{ ...s.btn(false), borderColor:"var(--pac-warn-border-deep)", color:"var(--pac-warn)" }} onClick={()=>{
-                        const entry = { id:Date.now(), scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO, dismissed:false };
-                        const updated = [entry, ...followups]; setFollowups(updated); saveFollowups(updated); setFollowupSaved(true);
+                        const entry = { id:String(Date.now()), ownerEmail:identity.email, scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO };
+                        const updated = [entry, ...followups]; setFollowups(updated); setFollowupSaved(true);
+                        createFollowupEntry(entry).catch(err => console.error("Couldn't save follow-up reminder", err));
                       }}>Save reminder</button>
                     )}
                   </div>
