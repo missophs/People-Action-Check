@@ -1493,9 +1493,12 @@ function App() {
           const today = new Date(); today.setHours(0,0,0,0);
           return (
             <div style={{ background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-alt)", borderRadius:12, padding:"14px 18px", marginBottom:18 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:10 }}>
-                <Icon name="calendar" size={18} color="var(--pac-warn)" />
-                <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:9, marginBottom:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                  <Icon name="calendar" size={18} color="var(--pac-warn)" />
+                  <div style={{ fontWeight:700, fontSize:"0.9rem", color:"var(--pac-warn)" }}>Follow-up reminders</div>
+                </div>
+                <button style={{ fontSize:"0.71rem", color:"var(--pac-text-muted)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setFollowups([]); saveFollowups([]); }}>Clear all reminders</button>
               </div>
               {active.map(f=>{
                 const dueDate = new Date(f.dueDate+`T00:00:00`);
