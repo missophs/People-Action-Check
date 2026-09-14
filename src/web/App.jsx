@@ -929,9 +929,18 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
                 ) : viewingCheck ? (
                   <CheckHistoryDetail entry={viewingCheck} onClose={()=>setViewingCheck(null)} />
                 ) : (
-                  allChecks.map(entry => (
-                    <CheckHistoryRow key={entry.id} entry={entry} showOwner onClick={()=>setViewingCheck(entry)} />
-                  ))
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                      <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{
+                        if (!window.confirm(`Clear all ${allChecks.length} check(s) for every manager? This can't be undone.`)) return;
+                        setAllChecks([]);
+                        clearCheckHistory().catch(err => console.error("Couldn't clear all checks", err));
+                      }}>Clear all checks</button>
+                    </div>
+                    {allChecks.map(entry => (
+                      <CheckHistoryRow key={entry.id} entry={entry} showOwner onClick={()=>setViewingCheck(entry)} />
+                    ))}
+                  </div>
                 )}
               </div>
             )
@@ -1685,6 +1694,7 @@ function App() {
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
                 <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
+                <button style={s.btn(false)} onClick={startNew}>Close</button>
               </div>
               {/* 30-day follow-up */}
               {(()=>{
