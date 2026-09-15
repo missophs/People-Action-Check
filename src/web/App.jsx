@@ -1053,6 +1053,7 @@ function CheckHistoryDetail({ entry, onClose }) {
           </div>
         ))}
       </div>
+      <button style={{ marginTop:16, width:"100%", padding:"10px", borderRadius:"var(--pac-radius-full)", border:"1px solid var(--pac-border-3)", background:"var(--pac-surface-1)", color:"var(--pac-text)", cursor:"pointer", fontSize:"var(--pac-text-md)", fontWeight:600, fontFamily:"var(--pac-font)" }} onClick={onClose}>Close</button>
     </div>
   );
 }
