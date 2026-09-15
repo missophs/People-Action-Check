@@ -1548,7 +1548,7 @@ function App() {
                 </div>
               ))}
               <div style={{ marginTop:14, marginBottom:4 }}>
-                <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase" }} onClick={()=>setShowDocTips(v=>({...v,[name]:!v[name]}))}>
+                <button style={{ fontSize:"0.71rem", color:"var(--pac-accent-text-75)", cursor:"pointer", background:"none", border:"none", fontFamily:"inherit", padding:0, fontWeight:600, letterSpacing:"0.04em", textTransform:"uppercase", textDecoration:"underline" }} onClick={()=>setShowDocTips(v=>({...v,[name]:!v[name]}))}>
                   {showDocTips[name]?"Hide documentation tips":"+ How to document this situation"}
                 </button>
               </div>
@@ -1575,7 +1575,12 @@ function App() {
                   <div style={{ fontSize:"0.73rem", color:"var(--pac-text-dim)", marginTop:5 }}>If added, this name will appear in Session History so you can identify this check later.</div>
                 </div>
               )}
-              {isLast && (step==="context" ? <button style={s.btn(true)} onClick={start}>Start the check</button> : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>)}
+              {isLast && (step==="context" ? (
+                <div style={{ display:"flex", gap:10 }}>
+                  <button style={s.btn(false)} onClick={()=>setStep("pick")}>Back to selection</button>
+                  <button style={{ ...s.btn(true), flex:1 }} onClick={start}>Start the check</button>
+                </div>
+              ) : <button style={s.btn(false)} onClick={()=>setStep("context")}>Back to overview</button>)}
             </div>
           );
         })}
