@@ -1096,7 +1096,6 @@ function App() {
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
-  useEffect(() => { window.scrollTo(0,0); }, [step]);
 
   // Session History and follow-up reminders are per-manager, filtered to
   // their verified Google identity, and synced across their devices.
@@ -1637,6 +1636,9 @@ function App() {
                 </div>
               );
             })}
+            {step==="questions" && answered===qs.length && (
+              <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={()=>setStep("result")}>View results</button>
+            )}
           </div>
         )}
 
@@ -1707,6 +1709,7 @@ function App() {
                 ))}
               </div>
               <div className="pac-result-actions">
+                <button style={s.btn(false)} onClick={()=>setStep("questions")}>Back to answers</button>
                 <button style={s.btn(true)} onClick={start}>Run again</button>
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
