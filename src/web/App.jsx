@@ -1096,6 +1096,7 @@ function App() {
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
   useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
+  useEffect(() => { window.scrollTo(0,0); }, [step]);
 
   // Session History and follow-up reminders are per-manager, filtered to
   // their verified Google identity, and synced across their devices.
@@ -1374,7 +1375,7 @@ function App() {
     const rel=policies.filter(p=>{ const cat=POLICY_CATEGORIES.find(c=>c.id===p.category); return cat&&scenarios.some(name=>cat.scenarios.includes(name)); });
     if(rel.length){ lines.push("","--- Company documents referenced:"); rel.forEach(p=>lines.push(`- ${p.name} (${POLICY_CATEGORIES.find(c=>c.id===p.category)?.label})`)); }
     lines.push("","General guidance only — not legal advice.");
-    navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
+    navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }).catch(()=>{});
   };
 
   return (
