@@ -1143,7 +1143,9 @@ function App() {
     setHints(new Array(n).fill(false));
     setShowResume(false); setSavedSession(null);
   };
-  const dismissResume = () => { setShowResume(false); setSavedSession(null); clearSession(); };
+  // Hides the reminder banner only — the check itself is never deleted here.
+  // Deleting a check is a separate, explicit action from its Session History row.
+  const dismissResume = () => { setShowResume(false); setSavedSession(null); };
 
   const qs = combinedQuestions(scenarios);
   const answered = answers.filter(a=>a!==null).length;
@@ -1431,7 +1433,7 @@ function App() {
             </div>
             <div className="pac-resume-actions" style={{ display:"flex", gap:8, flexShrink:0 }}>
               <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
-              <button style={s.btn(false)} onClick={dismissResume}>Dismiss</button>
+              <button style={s.btn(false)} onClick={dismissResume}>Save for later</button>
             </div>
           </div>
         )}
