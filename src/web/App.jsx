@@ -1086,6 +1086,8 @@ function App() {
   const fileInputRef                        = useRef(null);
   const [followups, setFollowups]           = useState([]);
   const [followupSaved, setFollowupSaved]   = useState(false);
+  const defaultFollowupDate = () => { const d=new Date(); d.setDate(d.getDate()+30); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const [followupDate, setFollowupDate]     = useState(defaultFollowupDate);
   const [slackWebhook, setSlackWebhook]     = useState("");
   const [teamsWebhook, setTeamsWebhook]     = useState("");
 
@@ -1343,7 +1345,7 @@ function App() {
       setStep("result");
     }
   };
-  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setShowResume(false); setSavedSession(null); setAttachments([]); };
+  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setShowResume(false); setSavedSession(null); setAttachments([]); };
 
   const ll = liveLevel();
   const liveColors = {neutral:"var(--pac-text-muted)",good:"var(--pac-good)",warn:"var(--pac-warn)",risk:"var(--pac-risk)"};
@@ -1475,7 +1477,7 @@ function App() {
               ) : (
                 <div>
                   <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
-                    <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); }}>Clear my history</button>
+                    <button style={{ fontSize:"0.72rem", color:"var(--pac-risk)", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:0 }} onClick={()=>{ setCheckHistory([]); setViewingPast(null); setFollowups([]); clearCheckHistory(identity.email).catch(err => console.error("Couldn't clear check history", err)); clearFollowups(identity.email).catch(err => console.error("Couldn't clear follow-up reminders", err)); }}>Clear my history</button>
                   </div>
                   {viewingPast!==null && checkHistory[viewingPast] ? (
                     <CheckHistoryDetail entry={checkHistory[viewingPast]} onClose={()=>setViewingPast(null)} />
@@ -1716,23 +1718,24 @@ function App() {
                 <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
                 <button style={s.btn(false)} onClick={startNew}>Close</button>
               </div>
-              {/* 30-day follow-up */}
+              {/* Follow-up reminder */}
               {(()=>{
-                const due = new Date(); due.setDate(due.getDate()+30);
-                const dueDateISO = `${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,"0")}-${String(due.getDate()).padStart(2,"0")}`;
-                const dueDateDisplay = due.toLocaleDateString();
+                const dueDateDisplay = new Date(followupDate+`T00:00:00`).toLocaleDateString();
                 return (
                   <div style={{ marginTop:12, background:"var(--pac-warn-surface)", border:"1px solid var(--pac-warn-border-deep)", borderRadius:14, padding:"18px 18px" }}>
-                    <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4, display:"flex", alignItems:"center", gap:8 }}><Icon name="calendar" size={18} color="var(--pac-warn)" /> Set a 30-day follow-up</div>
-                    <div style={{ fontSize:"0.83rem", color:"var(--pac-text-65)", lineHeight:1.55, marginBottom:14 }}>Come back on <strong style={{ color:"var(--pac-warn)" }}>{dueDateDisplay}</strong> to review progress on this situation. A reminder will appear on your home screen.</div>
+                    <div style={{ fontSize:"1rem", fontWeight:700, color:"var(--pac-text)", marginBottom:4, display:"flex", alignItems:"center", gap:8 }}><Icon name="calendar" size={18} color="var(--pac-warn)" /> Set a follow-up reminder</div>
+                    <div style={{ fontSize:"0.83rem", color:"var(--pac-text-65)", lineHeight:1.55, marginBottom:14 }}>We suggest 30 days out, but pick any date. A reminder will appear on your home screen.</div>
                     {followupSaved ? (
                       <div style={{ background:"var(--pac-good-bg)", border:"1px solid var(--pac-good-border)", borderRadius:"var(--pac-radius-md)", padding:"10px 14px", fontSize:"0.84rem", color:"var(--pac-good)", fontWeight:600 }}>✓ Reminder saved for {dueDateDisplay}</div>
                     ) : (
-                      <button style={{ ...s.btn(false), borderColor:"var(--pac-warn-border-deep)", color:"var(--pac-warn)" }} onClick={()=>{
-                        const entry = { id:String(Date.now()), ownerEmail:identity.email, scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:dueDateISO };
-                        const updated = [entry, ...followups]; setFollowups(updated); setFollowupSaved(true);
-                        createFollowupEntry(entry).catch(err => console.error("Couldn't save follow-up reminder", err));
-                      }}>Save reminder</button>
+                      <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+                        <input type="date" value={followupDate} onChange={e=>e.target.value&&setFollowupDate(e.target.value)} style={{ background:"var(--pac-surface-1)", border:"1px solid var(--pac-border-2)", borderRadius:"var(--pac-radius-md)", padding:"8px 10px", color:"var(--pac-text)", fontSize:"0.84rem", fontFamily:"inherit" }} />
+                        <button style={{ ...s.btn(false), borderColor:"var(--pac-warn-border-deep)", color:"var(--pac-warn)" }} onClick={()=>{
+                          const entry = { id:String(Date.now()), ownerEmail:identity.email, scenario:scenarios[0], scenarios, level:sc.level, employeeName:employeeName.trim(), checkDate:new Date().toLocaleDateString(), dueDate:followupDate };
+                          const updated = [entry, ...followups]; setFollowups(updated); setFollowupSaved(true);
+                          createFollowupEntry(entry).catch(err => console.error("Couldn't save follow-up reminder", err));
+                        }}>Save reminder</button>
+                      </div>
                     )}
                   </div>
                 );
