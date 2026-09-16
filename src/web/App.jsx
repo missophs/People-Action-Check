@@ -1726,7 +1726,7 @@ function App() {
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
                 <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
-                <button style={s.btn(false)} onClick={closeResult}>Close</button>
+                <button style={s.btn(false)} onClick={closeResult}>Back to home</button>
               </div>
               {/* Follow-up reminder */}
               {(()=>{
