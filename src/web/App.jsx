@@ -1084,6 +1084,7 @@ function App() {
   const [hrEmailStatus, setHrEmailStatus]   = useState("idle");
   const [attachments, setAttachments]       = useState([]);
   const fileInputRef                        = useRef(null);
+  const sendCardRef                         = useRef(null);
   const [followups, setFollowups]           = useState([]);
   const [followupSaved, setFollowupSaved]   = useState(false);
   const defaultFollowupDate = () => { const d=new Date(); d.setDate(d.getDate()+30); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -1096,8 +1097,8 @@ function App() {
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
-  useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&s.step==="questions"){setSavedSession(s);setShowResume(true);} }, []);
-  useEffect(() => { if(step==="pick"||step==="result")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
+  useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&(s.step==="questions"||s.step==="result")){setSavedSession(s);setShowResume(true);} }, []);
+  useEffect(() => { if(step==="pick")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
 
   // Session History and follow-up reminders are per-manager, filtered to
   // their verified Google identity, and synced across their devices.
@@ -1345,7 +1346,10 @@ function App() {
       setStep("result");
     }
   };
-  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setShowResume(false); setSavedSession(null); setAttachments([]); };
+  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setShowResume(false); setSavedSession(null); setAttachments([]); window.scrollTo({ top:0, left:0, behavior:"auto" }); };
+  // Close on a finished check: unlike New situation, keeps the completed check so
+  // "Resume" on the home screen (and the email-yourself link) can still send it.
+  const closeResult = () => { setSavedSession({ step:"result", scenarios, answers, notes }); setShowResume(true); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setAttachments([]); window.scrollTo({ top:0, left:0, behavior:"auto" }); };
 
   const ll = liveLevel();
   const liveColors = {neutral:"var(--pac-text-muted)",good:"var(--pac-good)",warn:"var(--pac-warn)",risk:"var(--pac-risk)"};
@@ -1528,7 +1532,11 @@ function App() {
           <div style={{ background:"var(--pac-accent-surface)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:12, padding:"13px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
             <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
             <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>
-              When you finish your check, you can <strong style={{ color:"var(--pac-accent)", fontWeight:600 }}>email the full results to yourself</strong> — add your own notes and bring it to HR.
+              {showResumeBanner && savedSession && savedSession.step==="result" ? (
+                <>You have a completed check ready to send. <button style={{ background:"none", border:"none", padding:0, margin:0, font:"inherit", color:"var(--pac-accent)", fontWeight:700, textDecoration:"underline", cursor:"pointer" }} onClick={resumeSession}>Email the full results to yourself</button> — add your own notes and bring it to HR.</>
+              ) : (
+                <>When you finish your check, you can <strong style={{ color:"var(--pac-accent)", fontWeight:600 }}>email the full results to yourself</strong> — add your own notes and bring it to HR.</>
+              )}
             </div>
           </div>
         )}
@@ -1656,7 +1664,7 @@ function App() {
             <div role="region" aria-label="Assessment result">
               <div style={{ background:"var(--pac-accent-surface-2)", border:"1px solid var(--pac-accent-border-2)", borderRadius:11, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:11 }}>
                 <Icon name="mail" size={20} color="var(--pac-accent)" style={{ flexShrink:0 }} />
-                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, use <strong style={{ color:"var(--pac-accent)" }}>Send to me and HR</strong> at the bottom of this page to email yourself a copy — add your own notes or context directly in the email before sending it to HR.</div>
+                <div style={{ fontSize:"0.83rem", color:"var(--pac-text-70)", lineHeight:1.5 }}>When you're done reviewing, use <button style={{ background:"none", border:"none", padding:0, margin:0, font:"inherit", color:"var(--pac-accent)", fontWeight:700, textDecoration:"underline", cursor:"pointer" }} onClick={()=>sendCardRef.current && sendCardRef.current.scrollIntoView({ behavior:"smooth", block:"start" })}>Send to me and HR</button> at the bottom of this page to email yourself a copy — add your own notes or context directly in the email before sending it to HR.</div>
               </div>
               <span style={s.label}>Assessment</span>
               {sc.crit && <div style={{ background:"var(--pac-risk-bg-light)", border:"1px solid var(--pac-risk-border-med)", borderRadius:11, padding:"12px 14px", fontSize:"0.84rem", color:"var(--pac-risk-text-90)", lineHeight:1.55, marginBottom:11 }}><strong>Critical question not confirmed.</strong> One or more questions marked Critical were answered No or Don't Know. These carry significant legal exposure. HR and legal review is required before any action.</div>}
@@ -1716,7 +1724,7 @@ function App() {
                 <button style={s.btn(false)} onClick={startNew}>New situation</button>
                 <button style={s.btn(false)} onClick={copySum}>{copied?"Copied!":"Copy summary"}</button>
                 <button style={s.btn(false)} onClick={downloadReport}>Download report (.docx)</button>
-                <button style={s.btn(false)} onClick={startNew}>Close</button>
+                <button style={s.btn(false)} onClick={closeResult}>Close</button>
               </div>
               {/* Follow-up reminder */}
               {(()=>{
@@ -1760,7 +1768,7 @@ function App() {
               </div>
 
               {/* Combined send card */}
-              <div style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
+              <div ref={sendCardRef} style={{ marginTop:12, background:"var(--pac-accent-panel-gradient)", border:"1px solid var(--pac-accent-border-alt)", borderRadius:14, padding:"20px 18px" }}>
                 <div style={{ fontSize:"0.72rem", color:"var(--pac-accent)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:5 }}>Send your results</div>
                 <div style={{ fontSize:"0.82rem", color:"var(--pac-text-60)", lineHeight:1.5, marginBottom:14 }}>
                   One click sends the full check, a Word doc report, and any attached files to <strong style={{ color:"var(--pac-text-70)" }}>{identity && identity.email}</strong>{hrEmail ? <> and to HR at <strong style={{ color:"var(--pac-text-70)" }}>{hrEmail}</strong> (logged in the HR Dashboard)</> : " — HR email isn't configured yet, so only your copy will send; an admin can set it in Company Policies → Upload Files"}. Add notes to your copy before sending it to HR.
