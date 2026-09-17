@@ -186,6 +186,7 @@ body {
   background: var(--pac-bg);
   font-family: var(--pac-font);
   color: var(--pac-text);
+  color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
