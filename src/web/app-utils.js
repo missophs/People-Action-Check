@@ -223,11 +223,33 @@ async function clearFollowups(email) {
   if (!res.ok) throw new Error("clear failed");
 }
 
-// ── Webhooks ──────────────────────────────────────────────────────────────
+// ── Webhooks (local + server-synced) ────────────────────────────────────────
 function loadSlackWebhook()  { try { return localStorage.getItem(SLACK_WEBHOOK_KEY)||""; } catch(e){return "";} }
 function saveSlackWebhook(v) { try { localStorage.setItem(SLACK_WEBHOOK_KEY, v); } catch(e) {} }
 function loadTeamsWebhook()  { try { return localStorage.getItem(TEAMS_WEBHOOK_KEY)||""; } catch(e){return "";} }
 function saveTeamsWebhook(v) { try { localStorage.setItem(TEAMS_WEBHOOK_KEY, v); } catch(e) {} }
+
+async function fetchWebhooksFromServer() {
+  var res = await fetch("/api/get-webhooks");
+  if (!res.ok) throw new Error("fetch failed");
+  return res.json();
+}
+async function saveSlackWebhookToServer(v) {
+  var res = await fetch("/api/save-webhooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slackWebhook: v }),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
+async function saveTeamsWebhookToServer(v) {
+  var res = await fetch("/api/save-webhooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teamsWebhook: v }),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
 
 // ── Scoring — mirrors src/core/scoring.js ─────────────────────────────────
 function computeScore(qs, answers) {

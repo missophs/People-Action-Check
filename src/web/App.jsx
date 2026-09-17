@@ -156,8 +156,10 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
   useEffect(() => { setHrEmailInput(hrEmail||""); }, [hrEmail]);
   const [slackInput, setSlackInput]       = useState(slackWebhook||"");
   const [slackSaved, setSlackSaved]       = useState(false);
+  const [slackError, setSlackError]       = useState(false);
   const [teamsInput, setTeamsInput]       = useState(teamsWebhook||"");
   const [teamsSaved, setTeamsSaved]       = useState(false);
+  const [teamsError, setTeamsError]       = useState(false);
   const [hrSubmissions, setHrSubmissions] = useState([]);
   const [viewingSub, setViewingSub]       = useState(null);
   const [allChecks, setAllChecks]         = useState([]);
@@ -772,10 +774,15 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
                       Incoming Webhook URL
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); }} />
-                      <button style={s.btn(true)} onClick={()=>{ onSaveSlackWebhook(slackInput.trim()); setSlackSaved(true); }}>Save</button>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://hooks.slack.com/services/..." value={slackInput} onChange={e=>{ setSlackInput(e.target.value); setSlackSaved(false); setSlackError(false); }} />
+                      <button style={s.btn(true)} onClick={async()=>{
+                        setSlackError(false);
+                        try { await onSaveSlackWebhook(slackInput.trim()); setSlackSaved(true); }
+                        catch(e) { setSlackError(true); }
+                      }}>Save</button>
                     </div>
-                    {slackSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
+                    {slackSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved — applies to every device.</div>}
+                    {slackError && <div style={{ fontSize:"0.77rem", color:"var(--pac-risk)", marginTop:5 }}>Couldn't save. Check your connection and try again.</div>}
                   </div>
                   <div>
                     <div style={{ fontSize:"0.69rem", color:"var(--pac-text-muted)", marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
@@ -783,10 +790,15 @@ function PolicyLibrary({ policies, setPolicies, onClose, currentScenarios, hrEma
                       Incoming Webhook URL
                     </div>
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); }} />
-                      <button style={s.btn(true)} onClick={()=>{ onSaveTeamsWebhook(teamsInput.trim()); setTeamsSaved(true); }}>Save</button>
+                      <input style={{ ...s.input, flex:1, minWidth:180, fontSize:"16px" }} placeholder="https://outlook.office.com/webhook/..." value={teamsInput} onChange={e=>{ setTeamsInput(e.target.value); setTeamsSaved(false); setTeamsError(false); }} />
+                      <button style={s.btn(true)} onClick={async()=>{
+                        setTeamsError(false);
+                        try { await onSaveTeamsWebhook(teamsInput.trim()); setTeamsSaved(true); }
+                        catch(e) { setTeamsError(true); }
+                      }}>Save</button>
                     </div>
-                    {teamsSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved.</div>}
+                    {teamsSaved && <div style={{ fontSize:"0.77rem", color:"var(--pac-good)", marginTop:5 }}>Saved — applies to every device.</div>}
+                    {teamsError && <div style={{ fontSize:"0.77rem", color:"var(--pac-risk)", marginTop:5 }}>Couldn't save. Check your connection and try again.</div>}
                   </div>
                 </div>
               </div>
@@ -1096,6 +1108,10 @@ function App() {
   useEffect(() => {
     setHrEmail(loadHrEmail()); setSlackWebhook(loadSlackWebhook()); setTeamsWebhook(loadTeamsWebhook());
     fetchHrEmailFromServer().then(v => { setHrEmail(v); saveHrEmail(v); }).catch(() => {});
+    fetchWebhooksFromServer().then(({slackWebhook, teamsWebhook}) => {
+      if (slackWebhook) { setSlackWebhook(slackWebhook); saveSlackWebhook(slackWebhook); }
+      if (teamsWebhook) { setTeamsWebhook(teamsWebhook); saveTeamsWebhook(teamsWebhook); }
+    }).catch(() => {});
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&(s.step==="questions"||s.step==="result")){setSavedSession(s);setShowResume(true);} }, []);
@@ -1419,7 +1435,7 @@ function App() {
 
   return (
     <div style={s.wrap}>
-      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenarios={scenarios} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
+      {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenarios={scenarios} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={async v=>{await saveSlackWebhookToServer(v);saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={async v=>{await saveTeamsWebhookToServer(v);saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
 
       <div style={{ maxWidth:"var(--pac-content-width)", margin:"0 auto" }} role="main" aria-label="People Action Check">
 
