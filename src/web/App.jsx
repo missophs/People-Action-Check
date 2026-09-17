@@ -1829,8 +1829,9 @@ function App() {
                   </>
                 )}
 
-                <div style={{ borderTop:"1px solid var(--pac-border-2)", marginTop:16, paddingTop:16 }}>
-                  <button style={{ ...s.btn(true), width:"100%", justifyContent:"center", display:"flex" }} onClick={startNew}>Start a new check</button>
+                <div style={{ borderTop:"1px solid var(--pac-border-2)", marginTop:16, paddingTop:16, display:"flex", gap:8 }}>
+                  <button style={{ ...s.btn(false), flex:1, justifyContent:"center", display:"flex" }} onClick={closeResult}>Back to home</button>
+                  <button style={{ ...s.btn(true), flex:1, justifyContent:"center", display:"flex" }} onClick={startNew}>Start a new check</button>
                 </div>
               </div>
             </div>
