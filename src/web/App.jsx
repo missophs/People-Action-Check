@@ -1066,6 +1066,7 @@ function App() {
   const [notes, setNotes]             = useState([]);
   const [hints, setHints]             = useState([]);
   const [copied, setCopied]           = useState(false);
+  const [exiting, setExiting]         = useState(false);
   const [showDocTips, setShowDocTips] = useState({});
   const [savedSession, setSavedSession]     = useState(null);
   const [showResumeBanner, setShowResume]   = useState(false);
@@ -1401,6 +1402,21 @@ function App() {
     navigator.clipboard.writeText(lines.join("\n")).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }).catch(()=>{});
   };
 
+  // Browsers only let a page close a tab it opened itself via script, so this
+  // silently does nothing for a normally-navigated tab. Show a plain "you're
+  // done" screen either way so the button never looks like it failed.
+  const exitApp = () => { window.close(); setExiting(true); };
+  if (exiting) {
+    return (
+      <div style={s.wrap}>
+        <div style={{ maxWidth:"var(--pac-content-width)", margin:"80px auto", textAlign:"center", padding:"0 18px" }}>
+          <div style={{ fontWeight:700, fontSize:"1.1rem", marginBottom:8 }}>You're all set.</div>
+          <div style={{ fontSize:"0.85rem", color:"var(--pac-text-muted)" }}>You can close this browser tab now.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={s.wrap}>
       {showPolicyLib && <PolicyLibrary policies={policies} setPolicies={setPolicies} onClose={()=>setShowPolicyLib(false)} currentScenarios={scenarios} hrEmail={hrEmail} onSaveHrEmail={async v=>{await saveHrEmailToServer(v);saveHrEmail(v);setHrEmail(v);}} slackWebhook={slackWebhook} onSaveSlackWebhook={v=>{saveSlackWebhook(v);setSlackWebhook(v);}} teamsWebhook={teamsWebhook} onSaveTeamsWebhook={v=>{saveTeamsWebhook(v);setTeamsWebhook(v);}} unlocked={policyLibUnlocked} setUnlocked={setPolicyLibUnlocked} />}
@@ -1420,6 +1436,11 @@ function App() {
             {(step==="context"||step==="questions") && (
               <button className="hdr-close" onClick={startNew} style={{ ...s.btn(false), flexShrink:0, whiteSpace:"nowrap" }} aria-label="Close this check and return to start">
                 Close
+              </button>
+            )}
+            {step==="pick" && (
+              <button className="hdr-exit" onClick={exitApp} style={{ ...s.btn(false), flexShrink:0, whiteSpace:"nowrap" }} aria-label="Exit People Action Check">
+                Exit
               </button>
             )}
             <button className="hdr-pol" onClick={()=>setShowPolicyLib(true)} style={{ ...s.btn(false), flexShrink:0, display:"flex", alignItems:"center", gap:7, whiteSpace:"nowrap", ...(policies.length>0?{borderColor:"var(--pac-accent-border-alt)",color:"var(--pac-accent)",background:"var(--pac-accent-surface)"}:{}) }}>
