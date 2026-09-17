@@ -16,10 +16,31 @@ async function sha256(str) {
   return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,"0"); }).join("");
 }
 
-// ── Session ───────────────────────────────────────────────────────────────
+// ── Session (localStorage fallback for signed-out use) ─────────────────────
 function saveSession(d)    { try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); } catch(e) {} }
 function loadSession()     { try { var d=localStorage.getItem(SAVE_KEY); return d?JSON.parse(d):null; } catch(e){return null;} }
 function clearSession()    { try { localStorage.removeItem(SAVE_KEY); } catch(e) {} }
+
+// ── Saved session (server-synced per signed-in manager — see
+// netlify/functions/session-store.js) ───────────────────────────────────────
+async function fetchSessionRemote(email) {
+  var res = await fetch("/api/session-store?email=" + encodeURIComponent(email));
+  if (!res.ok) throw new Error("fetch failed");
+  var data = await res.json();
+  return data.session || null;
+}
+async function saveSessionRemote(email, d) {
+  var res = await fetch("/api/session-store?email=" + encodeURIComponent(email), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(d),
+  });
+  if (!res.ok) throw new Error("save failed");
+}
+async function clearSessionRemote(email) {
+  var res = await fetch("/api/session-store?email=" + encodeURIComponent(email), { method: "DELETE" });
+  if (!res.ok) throw new Error("clear failed");
+}
 
 // ── Policies (server-synced Netlify Blobs — Slack needs to read these too,
 // so browser-only storage isn't an option; see netlify/functions/policy-store.js) ─

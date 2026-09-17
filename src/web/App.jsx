@@ -1098,7 +1098,22 @@ function App() {
     fetchPolicies().then(setPolicies).catch(err => console.error("Couldn't load company policies", err));
   }, []);
   useEffect(() => { const s=loadSession(); if(s&&entryScenarios(s).length&&s.step&&(s.step==="questions"||s.step==="result")){setSavedSession(s);setShowResume(true);} }, []);
-  useEffect(() => { if(step==="pick")return; saveSession({step,scenarios,answers,notes}); }, [step,scenarios,answers,notes]);
+  // Saved session is server-synced per signed-in manager (see
+  // netlify/functions/session-store.js) so Resume/Save for later cross devices,
+  // same as Check History and Policies. The local copy above is just the
+  // immediate/offline fallback; a real remote session (if any) wins once it loads.
+  useEffect(() => {
+    if (!identity) return;
+    fetchSessionRemote(identity.email).then(s => {
+      if (s && entryScenarios(s).length && s.step && (s.step==="questions"||s.step==="result")) { setSavedSession(s); setShowResume(true); }
+    }).catch(err => console.error("Couldn't load saved session", err));
+  }, [identity]);
+  useEffect(() => {
+    if(step==="pick")return;
+    const d={step,scenarios,answers,notes};
+    saveSession(d);
+    if (identity) saveSessionRemote(identity.email, d).catch(err => console.error("Couldn't sync saved session", err));
+  }, [step,scenarios,answers,notes,identity]);
 
   // Session History and follow-up reminders are per-manager, filtered to
   // their verified Google identity, and synced across their devices.
@@ -1345,10 +1360,11 @@ function App() {
         createCheckHistoryEntry(entry).then(saved => setCheckHistory(h=>[saved,...h])).catch(err => console.error("Couldn't save check history", err));
       }
       clearSession();
+      if (identity) clearSessionRemote(identity.email).catch(err => console.error("Couldn't clear saved session", err));
       setStep("result");
     }
   };
-  const startNew = () => { clearSession(); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setShowResume(false); setSavedSession(null); setAttachments([]); window.scrollTo({ top:0, left:0, behavior:"auto" }); };
+  const startNew = () => { clearSession(); if (identity) clearSessionRemote(identity.email).catch(err => console.error("Couldn't clear saved session", err)); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmailAddr(""); setEmailStatus("idle"); setHrEmailStatus("idle"); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setShowResume(false); setSavedSession(null); setAttachments([]); window.scrollTo({ top:0, left:0, behavior:"auto" }); };
   // Close on a finished check: unlike New situation, keeps the completed check so
   // "Resume" on the home screen (and the email-yourself link) can still send it.
   const closeResult = () => { setSavedSession({ step:"result", scenarios, answers, notes }); setShowResume(true); setScenarios([]); setStep("pick"); setAnswers([]); setNotes([]); setHints([]); setShowDocTips({}); setEmployeeName(""); setFollowupSaved(false); setFollowupDate(defaultFollowupDate()); setAttachments([]); window.scrollTo({ top:0, left:0, behavior:"auto" }); };
@@ -1434,6 +1450,7 @@ function App() {
             <div className="pac-resume-actions" style={{ display:"flex", gap:8, flexShrink:0 }}>
               <button style={s.btn(true)} onClick={resumeSession}>Resume</button>
               <button style={s.btn(false)} onClick={dismissResume}>Save for later</button>
+              <button style={s.btn(false)} onClick={startNew}>Start over</button>
             </div>
           </div>
         )}
